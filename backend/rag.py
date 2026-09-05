@@ -125,10 +125,12 @@ def generate(query: str, chunks: list[dict], jurisdiction: str | None) -> str:
 # ---------- step 4: verify citations ----------
 
 CITE_RE = re.compile(r"\[(\d+)\]")
+ALT_CITE_RE = re.compile(r"【(\d+)†[^】]*】")   # gpt-oss style citation
 
 
 def verify_citations(answer: str, n_sources: int):
     """Keep only sentences whose citations all point to real sources. Return cleaned text + used ids."""
+    answer = ALT_CITE_RE.sub(r"[\1]", answer)      # normalise to [n]
     sentences = re.split(r"(?<=[.!?])\s+", answer)
     kept, used = [], set()
     for s in sentences:

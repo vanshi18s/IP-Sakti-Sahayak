@@ -34,9 +34,24 @@ from sentence_transformers import SentenceTransformer
 import config
 
 SECTION_RE = re.compile(
-    r"^\s*((?:Section|Sec\.|Rule|Article|Art\.|Regulation|Reg\.)\s*\d+[A-Za-z]?(?:\(\w+\))*)",
-    re.IGNORECASE,
+    r"^\s*(?:"
+    r"(?:Section|Sec\.|Rule|Article|Art\.|Regulation|Reg\.)\s*\d+[A-Za-z]?(?:\(\w+\))*"   # "Section 3(p)"
+    r"|\d{1,3}[A-Z]{0,2}\.\s+[A-Z][^.\n]{3,80}"                                        # "3. What are not inventions"
+    r")",
 )
+
+
+def _tag_words(text: str):
+    """Yield (word, section_label) for every word on the page, tracking the last seen heading."""
+    section = ""
+    for line in text.split("\n"):
+        m = SECTION_RE.match(line)
+        if m:
+            label = m.group(0).strip()
+            num = re.match(r"\s*(\d{1,3}[A-Z]{0,2})\.", label)
+            section = f"Section {num.group(1)}" if num else label[:60]
+        for w in line.split():
+            yield w, section
 
 
 def load_metadata(pdf_path: Path) -> dict:
@@ -66,19 +81,17 @@ def extract_pages(pdf_path: Path):
 
 
 def chunk_page(text: str, words_per_chunk: int, overlap: int):
-    """Split page text into overlapping word windows; track the last seen section heading."""
-    words = text.split()
+    """Split page text into overlapping word windows; each chunk carries the section it starts in."""
+    tagged = list(_tag_words(text))
     step = max(words_per_chunk - overlap, 1)
-    current_section = ""
-    for start in range(0, len(words), step):
-        chunk_words = words[start:start + words_per_chunk]
-        chunk = " ".join(chunk_words)
-        for line in chunk.split("\n"):
-            m = SECTION_RE.match(line)
-            if m:
-                current_section = m.group(1).strip()
-        yield chunk, current_section
-        if start + words_per_chunk >= len(words):
+    for start in range(0, len(tagged), step):
+        window = tagged[start:start + words_per_chunk]
+        chunk = " ".join(w for w, _ in window)
+        # most common section label inside this window
+        labels = [s for _, s in window if s]
+        section = max(set(labels), key=labels.count) if labels else ""
+        yield chunk, section
+        if start + words_per_chunk >= len(tagged):
             break
 
 
