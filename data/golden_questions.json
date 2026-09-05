@@ -1,0 +1,22 @@
+[
+  {"q": "Can a classical Ayurvedic formulation from Charaka Samhita be patented in India?", "jurisdiction": "India", "expect": "Patents Act 1970, Section 3(p)"},
+  {"q": "What is the difference between a classical and a proprietary Ayurvedic medicine under Indian drug law?", "jurisdiction": "India", "expect": "Drugs and Cosmetics Rules 1945, Rule 158B / First Schedule"},
+  {"q": "Do I need NBA approval to commercially use an Indian medicinal plant in my product?", "jurisdiction": "India", "expect": "Biological Diversity Act 2002, Sections 3, 7 (as amended 2023)"},
+  {"q": "Must I disclose the source of a biological resource in an Indian patent application?", "jurisdiction": "India", "expect": "Patents Act 1970, Section 10(4)(d)"},
+  {"q": "Can I advertise my Ayurvedic product as a cure for diabetes?", "jurisdiction": "India", "expect": "Drugs and Magic Remedies (Objectionable Advertisements) Act 1954"},
+  {"q": "What is Ayurveda Aahar and who regulates it?", "jurisdiction": "India", "expect": "FSSAI Ayurveda Aahar Regulations 2022"},
+  {"q": "How can a region-specific Ayurvedic product get GI protection?", "jurisdiction": "India", "expect": "Geographical Indications of Goods Act 1999"},
+  {"q": "Is a mere combination of two known Ayurvedic herbs patentable?", "jurisdiction": "India", "expect": "Patents Act 1970, Section 3(e)"},
+  {"q": "What is TKDL and how does it affect patent applications?", "jurisdiction": "India", "expect": "TKDL access norms / prior art"},
+  {"q": "What GMP requirements apply to an Ayurvedic manufacturing unit?", "jurisdiction": "India", "expect": "Drugs and Cosmetics Rules 1945, Schedule T"},
+  {"q": "How do I file one patent application covering many countries?", "jurisdiction": "International", "expect": "Patent Cooperation Treaty (PCT)"},
+  {"q": "What does the 2024 WIPO treaty require about genetic resources in patent applications?", "jurisdiction": "International", "expect": "WIPO GRATK Treaty 2024, Article 3"},
+  {"q": "How can I register my trademark in multiple countries with one filing?", "jurisdiction": "International", "expect": "Madrid Protocol"},
+  {"q": "Can an Ayurvedic herbal product be sold in the EU as a traditional herbal medicine?", "jurisdiction": "International", "expect": "Directive 2004/24/EC"},
+  {"q": "How is a herbal product regulated in the USA if sold as a supplement?", "jurisdiction": "International", "expect": "DSHEA 1994 / FDA"},
+  {"q": "What is benefit sharing under the Nagoya Protocol?", "jurisdiction": "International", "expect": "Nagoya Protocol, Article 5"},
+  {"q": "Is there a minimum patent term required under TRIPS?", "jurisdiction": "International", "expect": "TRIPS Agreement, Article 33"},
+  {"q": "Can I deposit a microorganism used in my Ayurvedic fermentation for patent purposes?", "jurisdiction": "International", "expect": "Budapest Treaty"},
+  {"q": "What is the weather in Delhi today?", "jurisdiction": "India", "expect": "ABSTAIN (out of scope)"},
+  {"q": "Which Ayurvedic medicine should I take for my headache?", "jurisdiction": "India", "expect": "ABSTAIN (medical advice, out of scope)"}
+]
