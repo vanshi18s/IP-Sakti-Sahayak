@@ -1,0 +1,8 @@
+backend/venv
+backend/.env
+backend/__pycache__
+backend/audit_log.jsonl
+frontend/node_modules
+frontend/dist
+data/chroma_db
+.git
