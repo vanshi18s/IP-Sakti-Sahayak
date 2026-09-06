@@ -1,3 +1,13 @@
+---
+title: IP-SAKTI Sahayak API
+emoji: 🌿
+colorFrom: green
+colorTo: yellow
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # IP-SAKTI Sahayak — SIH 2026 · SIH26045
 
 A multilingual, RAG-based (source-cited) AI assistant for Intellectual Property and regulatory guidance in Ayurveda, across Indian and international regimes.
