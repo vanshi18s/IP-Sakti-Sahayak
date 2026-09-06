@@ -1,0 +1,11 @@
+backend/venv/
+backend/.env
+backend/audit_log.jsonl
+backend/eval_results.json
+backend/__pycache__/
+data/chroma_db/
+data/users.db
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+.DS_Store

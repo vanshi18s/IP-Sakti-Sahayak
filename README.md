@@ -1,256 +1,266 @@
-# IP-Sakti-Sahayak
+---
+title: IP-SAKTI Sahayak API
+emoji: 🌿
+colorFrom: green
+colorTo: yellow
+sdk: gradio
+sdk_version: 5.0.0
+app_file: app.py
+pinned: false
+---
 
-# IP-SAKTI Sahayak — Workflow & Research Report
-**Problem Statement:** SIH26045 · Ministry of Ayush · Software
-**Title:** IP-SAKTI Sahayak — a multilingual, RAG-based (source-cited) AI assistant for Intellectual Property and regulatory guidance in Ayurveda, across national and international regimes.
+# IP-SAKTI Sahayak — SIH 2026 · SIH26045
 
-> Note: Verify the official "Background / Expected Solution" text on sih.gov.in and paste it into Section 1.2 before submission.
+A multilingual, RAG-based (source-cited) AI assistant for Intellectual Property and regulatory guidance in Ayurveda, across Indian and international regimes.
+
+**Ministry of Ayush · All India Institute of Ayurveda · Software · MedTech/HealthTech**
+Idea submission deadline: 30 September 2026
 
 ---
 
-## PART A — WORKFLOW
+## 1. What this project does
 
-### A.1 System overview
+A user (Ayurveda manufacturer, researcher, startup, practitioner) asks a question like *"Can a classical Ayurvedic formulation be patented in India?"*. The system:
 
-IP-SAKTI Sahayak is a Retrieval-Augmented Generation (RAG) assistant. Instead of letting a language model answer from memory (and hallucinate), it first retrieves the exact passages from an indexed corpus of laws, rules and guidelines, then generates an answer grounded in those passages, and cites them. Users can ask in Hindi, English or other Indian languages.
+1. Finds the exact passages in official laws (Patents Act, Drugs & Cosmetics Act, WIPO treaties, etc.) that answer it
+2. Writes a plain-language answer **only from those passages**
+3. Shows every source it used — Act name, Section, page, link — so nothing is made up
+4. Keeps Indian and international law visibly separate
+5. Says "I don't know" when the corpus has no answer, and offers to escalate to a human
 
-### A.2 High-level architecture
-
-```
-User (Web / Mobile / WhatsApp)
-        │  question in any supported language
-        ▼
-┌─────────────────────┐
-│ 1. Language Layer   │  detect language → translate to English (IndicTrans2 / Bhashini)
-└─────────┬───────────┘
-          ▼
-┌─────────────────────┐
-│ 2. Query Processing │  classify intent (IP / regulatory / export / general)
-│                     │  identify jurisdiction (India / US / EU / WIPO / other)
-└─────────┬───────────┘
-          ▼
-┌─────────────────────┐
-│ 3. Retriever        │  embed query → hybrid search (vector + BM25) over Vector DB
-│                     │  filter by jurisdiction/document type → re-rank top-k chunks
-└─────────┬───────────┘
-          ▼
-┌─────────────────────┐
-│ 4. Generator (LLM)  │  prompt = system rules + retrieved chunks + question
-│                     │  answer ONLY from context; attach citation IDs; flag uncertainty
-└─────────┬───────────┘
-          ▼
-┌─────────────────────┐
-│ 5. Citation & Guard │  verify every claim maps to a chunk; add disclaimer;
-│                     │  refuse if no relevant source found
-└─────────┬───────────┘
-          ▼
-┌─────────────────────┐
-│ 6. Language Layer   │  translate answer back to user's language
-└─────────┬───────────┘
-          ▼
-   Answer + source list (Act, Section, page, URL) + confidence
-
-Offline pipeline (Data Preprocessing team):
-Source docs (PDF/HTML) → extract text (OCR if scanned) → clean → chunk (400–800 tokens, section-aware)
-→ attach metadata (act name, section, jurisdiction, date, URL) → embed → store in Vector DB
-```
-
-### A.3 Step-by-step workflow
-
-**Phase 1 — Knowledge base construction (offline)**
-1. Collect authoritative documents (see A.5).
-2. Convert to text; run OCR on scanned gazette PDFs.
-3. Clean: remove headers/footers, fix encoding, keep section numbering.
-4. Chunk by legal structure (Section / Rule / Article), not by fixed length alone.
-5. Attach metadata to each chunk: `{doc_title, section, jurisdiction, doc_type, effective_date, source_url}`.
-6. Generate embeddings (multilingual model such as `bge-m3` or `multilingual-e5`).
-7. Store in a vector database (Chroma / FAISS / Qdrant) with a parallel keyword index.
-
-**Phase 2 — Query handling (online)**
-1. Receive query; detect language.
-2. Translate to English for retrieval (keeps a single-language index; simpler and more accurate).
-3. Classify intent and jurisdiction to narrow the search space.
-4. Retrieve top-k chunks (k ≈ 8–10) using hybrid search; re-rank with a cross-encoder.
-5. Build prompt with strict grounding instructions.
-6. LLM generates answer with inline citation markers `[1] [2]`.
-7. Post-check: each marker must resolve to a retrieved chunk; unsupported sentences are dropped.
-8. Translate answer back; render sources as clickable references.
-9. Log query + retrieved docs (for evaluation and improvement).
-
-**Phase 3 — Evaluation & feedback**
-- Golden Q&A set (50–100 questions written with a domain expert).
-- Metrics: retrieval recall@k, citation accuracy, answer faithfulness (RAGAS), language quality.
-- Thumbs-up/down feedback loop in the UI.
-
-### A.4 Suggested tech stack
-
-| Layer | Option |
-|---|---|
-| Frontend | React / Next.js; optional WhatsApp via Twilio or Meta API |
-| Backend | Python, FastAPI |
-| Orchestration | LangChain or LlamaIndex |
-| Embeddings | bge-m3 / multilingual-e5-large (open source) |
-| Vector DB | Chroma (prototype) → Qdrant / pgvector (scale) |
-| LLM | Open-weight (Llama 3 / Mistral / Sarvam) or API (Gemini / GPT / Claude) |
-| Translation | IndicTrans2, Bhashini APIs |
-| Re-ranker | bge-reranker |
-| Evaluation | RAGAS, custom test set |
-| Deployment | Docker; cloud or on-prem (govt data sensitivity) |
-
-### A.5 Knowledge base — source list
-
-**India (IP)**
-- The Patents Act, 1970 & Patent Rules, 2003 (esp. Section 3(p) on traditional knowledge)
-- Trade Marks Act, 1999
-- Geographical Indications of Goods Act, 1999
-- Copyright Act, 1957 (for texts, formulations documentation)
-- Biological Diversity Act, 2002 & NBA guidelines (access & benefit sharing)
-- Traditional Knowledge Digital Library (TKDL) — overview & access norms
-- Indian Patent Office Manual of Patent Practice & Procedure
-- National IPR Policy, 2016
-
-**India (Regulatory)**
-- Drugs and Cosmetics Act, 1940 & Rules, 1945 (Chapter IV-A: ASU drugs)
-- Ayurvedic Pharmacopoeia of India (API) & Ayurvedic Formulary of India (AFI)
-- Ministry of Ayush notifications, GMP (Schedule T), licensing guidelines
-- FSSAI regulations for Ayurveda-based nutraceuticals / health supplements
-- Pharmacovigilance guidelines for ASU drugs
-- Export requirements: APEDA, Pharmexcil, AYUSH export policy
-
-**International**
-- WIPO: IGC on Genetic Resources, Traditional Knowledge & Folklore; 2024 WIPO Treaty on Genetic Resources
-- TRIPS Agreement (WTO)
-- Nagoya Protocol (Convention on Biological Diversity)
-- USA: FDA Dietary Supplement Health and Education Act (DSHEA), Botanical Drug Guidance, USPTO guidelines
-- EU: Directive 2004/24/EC (Traditional Herbal Medicinal Products), EMA HMPC monographs, Novel Food Regulation
-- WHO Traditional Medicine Strategy 2025–2034; WHO Benchmarks for Ayurveda training/practice
-- Selected country rules: UK MHRA, Canada NNHPD, Australia TGA
+It also classifies the user's product (classical / proprietary / new drug / Ayurveda-Aahar / cosmetic) and points to prior art for patent checks.
 
 ---
 
-## PART B — RESEARCH REPORT
+## 2. How it works (read this once)
 
-### 1. Introduction
+```
+Your question
+     │
+     ▼
+Embedding model (bge-m3, runs on your laptop)  →  turns question into a vector
+     │
+     ▼
+ChromaDB (vector database on disk)              →  finds 8 closest passages from the law corpus
+     │
+     ▼
+Grader (LLM via Groq API)                        →  checks each passage: relevant or not? (CRAG step)
+     │  none relevant → rewrite question once → retry → still none → ABSTAIN
+     ▼
+Generator (LLM via Groq API)                     →  writes answer using ONLY the relevant passages, cites [1][2]
+     │
+     ▼
+Citation verifier (plain Python)                 →  every [n] must map to a real passage; confidence score
+     │
+     ▼
+React frontend                                   →  answer + source cards + confidence + escalate button
+```
 
-#### 1.1 Context
-India's Ayurveda sector — manufacturers, MSMEs, startups, research institutions and practitioners — increasingly seeks to protect formulations and enter global markets. Doing so requires navigating two complex, fragmented domains at once: intellectual property (patents, trademarks, GIs, traditional-knowledge protection) and regulatory compliance (licensing, GMP, pharmacopoeial standards, export rules). Information is spread across dozens of Acts, rules, gazette notifications and international instruments, mostly in English legalese.
+**Two AI models are involved:**
+- **bge-m3** — embedding model, downloaded once (~2.3 GB), runs locally, free. Only converts text to numbers.
+- **gpt-oss-120b via Groq** — the LLM that reads and writes. Called through an API key. Free tier is enough for development.
 
-#### 1.2 Problem statement (official)
-_[Paste official background text from sih.gov.in here.]_
+No OpenAI needed. Swap the LLM by changing two lines in `.env`.
 
-#### 1.3 Objective
-To build a multilingual, source-cited AI assistant that gives reliable, traceable guidance on IP and regulatory questions in Ayurveda, covering Indian and major international regimes.
+---
 
-### 2. Problem analysis
+## 3. Folder layout
 
-#### 2.1 Who is affected
-- MSME Ayurvedic manufacturers unsure whether a formulation is patentable or already covered by TKDL.
-- Startups seeking trademarks, GIs, or export approvals (US, EU).
-- Researchers at AIIA / CCRAS / universities filing patents on classical-formulation modifications.
-- Practitioners and students needing licensing and compliance clarity.
-- Government officers answering repetitive queries.
+```
+IP-Sakti-Sahayak/
+  backend/
+    main.py           FastAPI server — all API endpoints
+    rag.py            retrieve → grade → generate → verify citations
+    ingest.py         PDFs → chunks → ChromaDB  (run this when new documents arrive)
+    classify.py       3-question product classification flow
+    prior_art.py      search over the research-article CSV
+    evaluate.py       runs golden questions, reports metrics
+    config.py         settings
+    requirements.txt
+    .env.example      copy to .env and add your Groq key
+  frontend/
+    src/App.jsx       main page: tabs, jurisdiction toggle, question box
+    src/components/   AnswerPanel, SourceCard, Classify, PriorArt
+    src/api.js        all backend calls
+  data/
+    raw/              PDFs + matching .json metadata  ← DATA TEAM PUTS FILES HERE
+    chroma_db/        vector DB (auto-created, not in git)
+    golden_questions.json   test set
+  docs/               workflow + research report + dataset links
+```
 
-#### 2.2 Pain points
-- Fragmented sources; no single authoritative portal.
-- Legal language inaccessible to non-English speakers.
-- Generic chatbots hallucinate legal facts — dangerous in IP/regulatory contexts.
-- High dependence on costly consultants.
-- Historical bio-piracy cases (Neem, Turmeric, Basmati) show the cost of weak awareness.
+---
 
-#### 2.3 Why now
-- India's AYUSH market and export push (Ayush Visa, Ayush Export Promotion Council).
-- WHO Global Traditional Medicine Centre (Jamnagar) raising international interest.
-- 2024 WIPO treaty on genetic resources and traditional knowledge changes disclosure requirements globally.
-- Maturity of RAG and Indic-language models makes a trustworthy assistant feasible.
+## 4. Setup — first time
 
-### 3. Existing solutions & gaps
+Total time on a normal laptop: **~30 minutes** (most of it is the one-time model download).
 
-| Solution | Limitation |
+### 4.1 Prerequisites
+- Python 3.10+ (`python3 --version`)
+- Node.js 18+ (`node -v`)
+- Git
+- A free Groq API key from https://console.groq.com → API Keys → Create
+
+### 4.2 Clone and switch to the working branch
+```bash
+git clone https://github.com/vanshi18s/IP-Sakti-Sahayak.git
+cd IP-Sakti-Sahayak
+git checkout prakhar-backend
+```
+
+### 4.3 Backend (~20 min, mostly download)
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate            # Windows: venv\Scripts\activate
+pip install -r requirements.txt     # ~5 min
+cp .env.example .env
+```
+Open `backend/.env` and paste your key:
+```
+GROQ_API_KEY=gsk_xxxxxxxx
+GROQ_MODEL=openai/gpt-oss-120b
+```
+
+Put at least one PDF in `data/raw/` (see section 6), then:
+```bash
+python ingest.py            # first run downloads bge-m3 (~2.3 GB, 5-15 min). Later runs: seconds.
+```
+You should see `Done. Collection 'legal_corpus' now has N chunks`.
+
+Quick test from the terminal (put the question in quotes):
+```bash
+python rag.py "Can a classical Ayurvedic formulation be patented in India?"
+```
+
+Start the API:
+```bash
+uvicorn main:app --reload --port 8000
+```
+Open http://localhost:8000/docs to try endpoints in the browser.
+
+### 4.4 Frontend (~5 min)
+Open a **second terminal**:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Open http://localhost:5173. The header should say `Corpus loaded · N passages`. If it says `Backend offline`, the uvicorn terminal isn't running.
+
+---
+
+## 5. Daily workflow (after first setup)
+
+Terminal 1:
+```bash
+cd backend && source venv/bin/activate && uvicorn main:app --reload --port 8000
+```
+Terminal 2:
+```bash
+cd frontend && npm run dev
+```
+That's it. Model loads in ~15 s the first time you ask a question.
+
+---
+
+## 6. Adding documents (data team)
+
+Every document = one PDF + one JSON with the **same filename**, both in `data/raw/`:
+
+```
+data/raw/patents_act_1970.pdf
+data/raw/patents_act_1970.json
+```
+
+JSON contents:
+```json
+{
+  "doc": "The Patents Act, 1970",
+  "jurisdiction": "India",
+  "doc_type": "statute",
+  "version_date": "2024-03-15",
+  "url": "https://www.indiacode.nic.in/handle/123456789/1392"
+}
+```
+- `jurisdiction`: exactly `India` or `International` (this powers the toggle)
+- `doc_type`: `statute` | `rules` | `treaty` | `guideline` | `regulation`
+- `url`: the official source page — this becomes the "Open official text" link
+
+Then run `python ingest.py` (or `python ingest.py --reset` to rebuild everything). Commit the `.json` files; PDFs are git-ignored (too large) — share them via Drive.
+
+**Priority list of documents:** see `docs/SIH26045_Workflow_and_Research_Report.md` → Part A.5. Start with India IP, then India regulatory, then international.
+
+Also drop `ayurveda_drug_research_final.csv` in `data/raw/` — the prior-art search indexes it automatically on first use.
+
+---
+
+## 7. API reference
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/health` | — | status + number of chunks |
+| POST | `/chat` | `{query, jurisdiction?, category?}` | answer, sources[], confidence, abstained |
+| GET | `/classify/questions` | — | the 3 classification questions |
+| POST | `/classify` | `{answers: {q1, q2, q3}}` | product category + IP/regulatory/ABS posture |
+| POST | `/prior-art` | `{text, k?}` | matching research articles |
+| GET | `/sources` | — | list of documents in the corpus with versions |
+| POST | `/escalate` | `{query, reason?}` | logs the query for a human facilitator |
+
+---
+
+## 8. Evaluation
+
+```bash
+cd backend && python evaluate.py
+```
+Runs `data/golden_questions.json` and reports **citation correctness** and **safe abstention rate** — the metrics named in the problem statement. Add more questions to the JSON as documents grow.
+
+---
+
+## 9. Git workflow
+
+- `main` — stable, owned by team lead. Don't push directly.
+- `prakhar-backend` — active development branch. Work here.
+- When a feature is done and tested: open a Pull Request from `prakhar-backend` → `main`.
+
+Every time you finish something:
+```bash
+git add .
+git commit -m "short description of what changed"
+git push
+```
+
+Never commit: `.env` (your key), `venv/`, `node_modules/`, `data/chroma_db/`, PDFs. `.gitignore` already handles these.
+
+---
+
+## 10. Troubleshooting
+
+| Problem | Fix |
 |---|---|
-| IP India / Ayush ministry websites | Static, hard to search, English-only |
-| TKDL | Restricted access; not a Q&A system |
-| Generic LLM chatbots | No citations; hallucinate sections and rules |
-| Legal consultants | Expensive, slow, not scalable |
-| Existing legal-AI tools | Not Ayurveda-specific; no traditional-knowledge or AYUSH regulatory coverage |
+| `zsh: no matches found` when running rag.py | Put the question in double quotes |
+| `GROQ_API_KEY missing` | `.env` must be inside `backend/`, not the repo root |
+| `model_not_found` from Groq | Model name changed. Set `GROQ_MODEL=openai/gpt-oss-120b` in `.env` |
+| `No PDFs found` | Put a PDF in `data/raw/` |
+| Frontend says "Backend offline" | Start uvicorn in another terminal on port 8000 |
+| Ingest is slow | Only the first run downloads the model. Ctrl+C any extra `model.safetensors` download after "Done" appears |
+| Laptop too slow with bge-m3 | In `.env` set `EMBED_MODEL=intfloat/multilingual-e5-small`, then `python ingest.py --reset` |
+| Answer abstains on international questions | No international PDFs ingested yet — expected until data team adds them |
 
-**Gap:** No multilingual, citation-grounded assistant focused on Ayurveda IP + regulation across jurisdictions.
+---
 
-### 4. Proposed solution
+## 11. Roadmap
 
-#### 4.1 Core idea
-A RAG pipeline over a curated corpus of statutes, rules and guidelines, with strict grounding so every answer is traceable to a source passage. Multilingual input/output through Indic translation models.
-
-#### 4.2 Key features
-1. Multilingual chat (Hindi, English + regional languages via Bhashini).
-2. Source-cited answers with Act / Section / page / link.
-3. Jurisdiction selector (India / US / EU / WIPO).
-4. Guided flows: "Can I patent this?", "How to get an AYUSH license?", "Export to EU checklist".
-5. Document upload: user uploads a formulation description; assistant checks relevant provisions.
-6. Confidence indicator and mandatory disclaimer ("informational, not legal advice").
-7. Admin panel to add/update documents when laws change.
-
-#### 4.3 Technical approach
-See Part A. Key design choices:
-- **Hybrid retrieval** (dense + keyword) because legal queries often hinge on exact terms (section numbers, defined terms).
-- **Section-aware chunking** preserves legal context.
-- **Metadata filtering** by jurisdiction cuts irrelevant retrieval.
-- **Grounding guardrails**: refuse when no source is found; never answer from model memory.
-- **Translate-then-retrieve** keeps one high-quality English index while serving many languages.
-
-#### 4.4 Innovation / uniqueness
-- First Ayurveda-specific IP + regulatory assistant spanning national and international regimes.
-- Citation verification layer (post-generation check) rather than trusting the LLM.
-- Traditional-knowledge awareness: flags potential TKDL / Section 3(p) conflicts.
-- Built for Indic languages from day one.
-
-### 5. Feasibility
-
-| Aspect | Assessment |
-|---|---|
-| Technical | Mature open-source RAG stack; prototype achievable in hackathon window |
-| Data | Sources are public government documents; no licensing barrier |
-| Cost | Open-weight models + small vector DB run on modest hardware |
-| Scalability | Stateless API; vector DB scales horizontally |
-| Maintainability | Admin ingestion pipeline handles new notifications |
-
-### 6. Challenges & mitigation
-
-| Challenge | Mitigation |
-|---|---|
-| Legal hallucination | Strict grounding, citation verification, refusal policy |
-| Laws change frequently | Versioned documents with effective dates; re-ingestion pipeline |
-| Translation errors in legal terms | Glossary of legal terms kept untranslated; human-reviewed test set |
-| Scanned/poor PDFs | OCR + manual QA for core documents |
-| Liability | Clear disclaimer; positioned as guidance, not legal advice |
-| Evaluation | Expert-reviewed golden Q&A set; RAGAS metrics |
-
-### 7. Impact & benefits
-
-- **Social:** Democratises legal knowledge for rural MSMEs and non-English users.
-- **Economic:** Lowers consultancy costs; speeds up IP filing and market entry; supports Ayush exports.
-- **Government:** Reduces query load on ministry helpdesks; consistent, auditable answers.
-- **Research:** Helps institutions avoid rejected filings and protect traditional knowledge.
-- **Strategic:** Strengthens India's position against bio-piracy.
-
-### 8. Future scope
-- Integration with IP India e-filing and Ayush licensing portals.
-- Voice interface for low-literacy users.
-- Expansion to Unani, Siddha, Homoeopathy (full AYUSH).
-- Alerts when new notifications affect a user's saved product.
-- Country-by-country export compliance checker.
-
-### 9. Conclusion
-IP-SAKTI Sahayak addresses a concrete, high-value gap with a technically feasible, low-cost architecture. Its defining strength is trust: multilingual access combined with verifiable citations makes it usable for real IP and regulatory decisions, not just information browsing.
-
-### 10. References
-_(Fill with actual URLs when finalising)_
-1. The Patents Act, 1970 — ipindia.gov.in
-2. Drugs and Cosmetics Act, 1940 & Rules, 1945 — cdsco.gov.in
-3. Ministry of Ayush — ayush.gov.in
-4. Traditional Knowledge Digital Library — tkdl.res.in
-5. WIPO Treaty on IP, Genetic Resources and Associated Traditional Knowledge (2024) — wipo.int
-6. EU Directive 2004/24/EC — eur-lex.europa.eu
-7. US FDA Botanical Drug Development Guidance — fda.gov
-8. WHO Traditional Medicine Strategy 2025–2034 — who.int
-9. Lewis, P. et al. (2020). Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.
-10. Bhashini / IndicTrans2 — bhashini.gov.in, ai4bharat.iitm.ac.in
+- [x] Ingestion pipeline with section-aware chunking and metadata
+- [x] RAG with CRAG grader, citation verification, confidence, abstention
+- [x] Product classification flow
+- [x] Prior-art search over research bibliography
+- [x] React frontend with jurisdiction toggle and source cards
+- [ ] Ingest full India IP + regulatory corpus
+- [ ] Ingest international corpus (PCT, TRIPS, WIPO GRATK, Nagoya, EU 2004/24/EC, FDA)
+- [ ] Hindi input/output via Bhashini / IndicTrans2
+- [ ] ABS compliance checklist UI
+- [ ] Hybrid retrieval (BM25 + vector) and re-ranker
+- [ ] Dockerfile + deployment (Hugging Face Spaces for demo)
+- [ ] Evaluation report with 30+ golden questions

@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+python-multipart
+chromadb
+sentence-transformers
+pypdf
+groq
+python-dotenv
+pydantic
+pydantic[email]
+rank-bm25
+bcrypt
+PyJWT
