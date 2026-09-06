@@ -77,12 +77,22 @@ def _first_heading(text: str) -> str | None:
     return None
 
 
+def _name_from_filename(stem: str) -> str:
+    """'2_The Patents Act, 1970 (incorporating ...)_English' -> 'The Patents Act, 1970 (incorporating ...)'"""
+    s = re.sub(r"^\d+_", "", stem)                      # leading '10_'
+    s = re.sub(r"_(English|Hindi)$", "", s, flags=re.I)  # trailing language tag
+    s = s.replace("_", " ").strip()
+    return s[:120]
+
+
 def load_metadata(src_path: Path, text_head: str = "") -> dict:
     meta_path = src_path.with_suffix(".json")
+    stem_is_numeric = re.fullmatch(r"\d+", src_path.stem) is not None
+    name = (_first_heading(text_head) if stem_is_numeric else None) or _name_from_filename(src_path.stem)
     defaults = {
-        "doc": _first_heading(text_head) or src_path.stem.replace("_", " ").title(),
-        "jurisdiction": "India",
-        "doc_type": "statute",
+        "doc": name,
+        "jurisdiction": "International" if re.search(r"wipo|pct|trips|nagoya|eu_|fda|treaty", src_path.stem, re.I) else "India",
+        "doc_type": "rules" if "rule" in src_path.stem.lower() else "guideline" if "guideline" in src_path.stem.lower() else "statute",
         "version_date": "unknown",
         "url": "",
     }
@@ -182,7 +192,29 @@ def find_sources():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--reset", action="store_true", help="delete existing DB and re-embed everything")
+    parser.add_argument("--refresh-metadata", action="store_true",
+                        help="update doc names/jurisdiction/urls on existing chunks without re-embedding")
     args = parser.parse_args()
+
+    if args.refresh_metadata:
+        client = chromadb.PersistentClient(path=str(config.CHROMA_DIR))
+        coll = client.get_or_create_collection(config.COLLECTION_NAME)
+        by_file = {s.name: s for s in find_sources()}
+        data = coll.get(include=["metadatas"])
+        ids, metas, changed = [], [], 0
+        for cid, m in zip(data["ids"], data["metadatas"]):
+            src = by_file.get(m.get("source_file"))
+            if not src:
+                continue
+            head = "" if src.suffix.lower() == ".pdf" else src.read_text(encoding="utf-8", errors="ignore")[:2000]
+            fresh = load_metadata(src, head)
+            new_m = {**m, **fresh}
+            if new_m != m:
+                ids.append(cid); metas.append(new_m); changed += 1
+        for i in range(0, len(ids), 500):
+            coll.update(ids=ids[i:i + 500], metadatas=metas[i:i + 500])
+        print(f"Metadata refreshed on {changed} chunks (no re-embedding).")
+        return
 
     if args.reset and config.CHROMA_DIR.exists():
         shutil.rmtree(config.CHROMA_DIR)
