@@ -26,7 +26,12 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements-lite.txt
-cp .env.example .env
+```
+Your prompt must now start with `(venv)`. If it doesn't, run `source venv/bin/activate` again.
+
+Create your key file (skip this line if `backend/.env` already exists with your keys):
+```
+cp -n .env.example .env
 open -e .env
 ```
 A text editor opens. Replace the three placeholders:
@@ -38,7 +43,7 @@ Save (Cmd+S) and close the editor.
 
 ## Block 4 — build the knowledge base (5 minutes, once)
 ```
-python ingest.py --reset
+python ingest.py
 ```
 Wait until you see `Done. Collection 'legal_corpus' now has ... chunks`.
 Lines saying `429, retrying` are normal — it waits and continues.
@@ -47,7 +52,6 @@ Lines saying `429, retrying` are normal — it waits and continues.
 ```
 cd ../frontend
 npm install
-cd ..
 ```
 
 ## Block 6 — run (do this every time)
@@ -72,5 +76,6 @@ Header must say **Corpus loaded · N passages**. Press Ctrl+C in Terminal to sto
 ```
 cd ~/Desktop/IP-Sakti-Sahayak
 git pull
-cd backend && source venv/bin/activate && python ingest.py --reset
+cd backend && source venv/bin/activate && python ingest.py
 ```
+Only new or changed documents are embedded, so this takes seconds.

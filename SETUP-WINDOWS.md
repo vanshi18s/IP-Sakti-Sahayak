@@ -27,7 +27,12 @@ cd backend
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements-lite.txt
-copy .env.example .env
+```
+Your prompt must now start with `(venv)`. If it doesn't, run `venv\Scripts\activate` again.
+
+Create your key file (skip the copy line if `backend\.env` already exists with your keys):
+```
+if not exist .env copy .env.example .env
 notepad .env
 ```
 Notepad opens. Replace the three placeholders:
@@ -39,7 +44,7 @@ Save (Ctrl+S) and close Notepad.
 
 ## Block 4 — build the knowledge base (5 minutes, once)
 ```
-python ingest.py --reset
+python ingest.py
 ```
 Wait until you see `Done. Collection 'legal_corpus' now has ... chunks`.
 Lines saying `429, retrying` are normal — it waits and continues.
@@ -72,5 +77,6 @@ cd %USERPROFILE%\Desktop\IP-Sakti-Sahayak
 git pull
 cd backend
 venv\Scripts\activate
-python ingest.py --reset
+python ingest.py
 ```
+Only new or changed documents are embedded, so this takes seconds.

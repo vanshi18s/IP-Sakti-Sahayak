@@ -42,9 +42,9 @@ npm install
 **4. Build the knowledge base (once, ~5 minutes)**
 ```bash
 cd ../backend
-python ingest.py --reset
+python ingest.py
 ```
-Wait for "Done. Collection 'legal_corpus' now has N chunks". Repeat this whenever new documents are added.
+Wait for "Done. Collection 'legal_corpus' now has N chunks". Run the same command whenever new documents are added — it only embeds new or changed files (seconds). Use `python ingest.py --reset` only to rebuild everything from scratch.
 
 **5. Run (every time)**
 ```bash

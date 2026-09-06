@@ -181,7 +181,7 @@ def find_sources():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--reset", action="store_true", help="delete existing DB first")
+    parser.add_argument("--reset", action="store_true", help="delete existing DB and re-embed everything")
     args = parser.parse_args()
 
     if args.reset and config.CHROMA_DIR.exists():
@@ -200,9 +200,28 @@ def main():
         name=config.COLLECTION_NAME, metadata={"hnsw:space": "cosine"}
     )
 
-    total = 0
+    # Incremental: remember a hash per file; unchanged files are skipped, changed ones re-embedded.
+    import hashlib
+    state_path = config.CHROMA_DIR / "ingested.json"
+    state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    current_names = {s.name for s in sources}
+
+    # drop chunks of files that were deleted from the repo
+    for name in list(state):
+        if name not in current_names:
+            collection.delete(where={"source_file": name})
+            del state[name]
+            print(f"Removed {name} (file deleted)")
+
+    total, skipped = 0, 0
     for src in sources:
+        digest = hashlib.md5(src.read_bytes()).hexdigest()
+        if state.get(src.name) == digest:
+            skipped += 1
+            continue
         print(f"Processing {src.relative_to(config.RAW_DIR.parent.parent)} ...")
+        if src.name in state:
+            collection.delete(where={"source_file": src.name})   # changed file: replace its chunks
         docs, metas, ids = build_chunks(src)
         if not docs:
             print("  [skip] no extractable text (scanned PDF? run OCR first)")
@@ -218,10 +237,12 @@ def main():
                 ids=ids[i:i + 256],
             )
         total += len(docs)
+        state[src.name] = digest
+        state_path.write_text(json.dumps(state, indent=1))   # save after each file: safe to Ctrl+C
         print(f"  added {len(docs)} chunks")
 
     print(f"\nDone. Collection '{config.COLLECTION_NAME}' now has {collection.count()} chunks "
-          f"({total} added this run). DB at {config.CHROMA_DIR}")
+          f"({total} added this run, {skipped} files unchanged). DB at {config.CHROMA_DIR}")
 
 
 if __name__ == "__main__":
