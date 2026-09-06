@@ -1,124 +1,50 @@
-# IP-SAKTI Sahayak — SIH 2026 (SIH26045)
+# IP-SAKTI Sahayak
 
-Multilingual, source-cited AI assistant for Intellectual Property and regulatory guidance in Ayurveda.
-Ministry of Ayush · All India Institute of Ayurveda · Software · MedTech/HealthTech
+AI assistant for Intellectual Property and regulatory guidance in Ayurveda. Every answer is cited to the law it came from.
+Smart India Hackathon 2026 · Problem Statement 26045 · Ministry of Ayush / AIIA
 
-Live frontend: https://ip-sakti-sahayak-a854jchfy-prakhar-pandeys-projects-daa6c6b7.vercel.app (backend must be running somewhere — see "Sharing a live link")
+## Run it
 
----
+Step-by-step guides: **[Mac](SETUP-MAC.md)** · **[Windows](SETUP-WINDOWS.md)**
 
-## Run it on your laptop (first time: ~20 minutes)
-
-You need: Python 3.10+, Node.js 18+, Git.
-
-**1. Clone**
-```bash
-git clone https://github.com/vanshi18s/IP-Sakti-Sahayak.git
-cd IP-Sakti-Sahayak
-```
-
-**2. Backend setup**
-```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
-pip install -r requirements-lite.txt
-cp .env.example .env
-```
-Open `backend/.env` and fill in 3 things:
-```
-GROQ_API_KEY=gsk_...        # free key from https://console.groq.com
-JINA_API_KEY=jina_...       # free key from https://jina.ai/embeddings
-JWT_SECRET=any-long-random-text
-EMBED_BACKEND=jina
-```
-
-**3. Frontend setup**
-```bash
-cd ../frontend
-npm install
-```
-
-**4. Build the knowledge base (once, ~5 minutes)**
-```bash
-cd ../backend
-python ingest.py
-```
-Wait for "Done. Collection 'legal_corpus' now has N chunks". Run the same command whenever new documents are added — it only embeds new or changed files (seconds). Use `python ingest.py --reset` only to rebuild everything from scratch.
-
-**5. Run (every time)**
-```bash
-cd ..            # back to repo root
-./run.sh
-```
-Open http://localhost:5173. Header should say "Corpus loaded · N passages". Done.
-
-No model download — embeddings come from the Jina API.
-
----
-
-## What each tab does
-
-| Tab | What it does | Try |
-|---|---|---|
-| Ask | Question in any Indian language → cited answer, confidence, sources | "Can a classical Ayurvedic formulation be patented in India?" |
-| Review document | Upload a product sheet → 4 checks (patent, regulatory, ABS, advertising) | any .txt describing a formulation |
-| Classify product | 3 questions → classical / proprietary / new drug / Aahar / cosmetic | — |
-| ABS check | 6 questions → NBA / SBB requirement + benefit sharing | — |
-| Prior art | Formulation text → matching research papers | "Guduchi extract for diabetes" |
-| Corpus | List of documents in the knowledge base with versions | — |
-
-Toggle India / International / Both. Language dropdown for Hindi, Tamil, etc. Mic button for voice.
-Sign in (any email + password) to escalate a question. Register as "IP facilitator" to see the escalation queue.
-
----
-
-## Adding documents (data team)
-
-1. Convert the PDF to markdown (pymupdf4llm). Put the `.md` file in `markdown_output/` (any subfolder is fine).
-2. First line of the file must be the document name: `# The Patents Act, 1970`
-3. Optional: add a row in `data/raw/manifest.csv` for link / version date / International:
-   `filename,doc,jurisdiction,doc_type,version_date,url`
-4. Push to GitHub `main`.
-5. Everyone: `git pull`, then `cd backend && python ingest.py --reset` (5 min). Done.
-
-Scanned PDFs give empty `.md` — OCR them first.
-
-**Priority documents still needed:**
-- Regulatory: Drugs & Cosmetics Act 1940 + Rules 1945, Drugs & Magic Remedies Act 1954, FSSAI Ayurveda Aahar Regulations 2022, Biological Diversity Act 2002 (2023 amendment) + Rules 2024
-- International: PCT, TRIPS, WIPO GRATK Treaty 2024, Nagoya Protocol, EU Directive 2004/24/EC, US FDA Botanical Drug Guidance (mark these `International` in manifest.csv)
-
----
-
-## Sharing a live link (optional)
-
-The frontend is on Vercel. It needs a backend URL in its `VITE_API_URL` setting. Two ways to provide one:
-
-- **Quick (laptop must stay on):** `cloudflared tunnel --url http://localhost:8000` → paste the printed URL into Vercel → Redeploy.
-- **Always on (free):** deploy `render.yaml` on Render.com (Blueprint → connect repo → add the 3 keys). Render sleeps after 15 min idle and wakes in ~50 s.
-
-For the hackathon demo, run everything on a laptop. The link is a bonus.
-
----
-
-## Folder map
+Short version:
 
 ```
-backend/     FastAPI + RAG (rag.py = retrieve → grade → answer → verify; classify, abs_check, review, auth, translate)
-frontend/    React app (src/App.jsx, src/components/)
-data/        chroma_db (vector DB, committed), golden_questions.json (test set), raw/manifest.csv
-markdown_output/  documents from the data team
-docs/        workflow + research report
-run.sh       starts backend + frontend
+git clone https://github.com/vanshi18s/IP-Sakti-Sahayak.git && cd IP-Sakti-Sahayak
+cd backend && python3 -m venv venv && source venv/bin/activate && pip install -r requirements-lite.txt
+cp -n .env.example .env      # then put your GROQ_API_KEY and JINA_API_KEY in backend/.env
+python ingest.py             # builds the knowledge base, ~5 min once
+cd ../frontend && npm install && cd ..
+./run.sh                     # opens on http://localhost:5173
 ```
+
+Both keys are free: [Groq](https://console.groq.com) (LLM) · [Jina](https://jina.ai/embeddings) (embeddings).
+
+## Add documents
+
+Put a `.md` file in `markdown_output/` (any subfolder). Filename becomes the document name, e.g. `The_Patents_Act_1970.md`.
+Push to `main`. Everyone else: `git pull` then `python ingest.py` — only new files are embedded.
+
+Still needed: Drugs & Cosmetics Act + Rules, Drugs & Magic Remedies Act, FSSAI Ayurveda Aahar, Biological Diversity Act + Rules 2024, PCT, TRIPS, WIPO GRATK 2024, Nagoya, EU 2004/24/EC, FDA botanical guidance.
+
+## What's inside
+
+| Tab | Does |
+|---|---|
+| Ask | question in any Indian language → cited answer, confidence, India / International / Both |
+| Review document | upload a product sheet → patent, regulatory, ABS and advertising checks |
+| Classify product | classical / proprietary / new drug / Aahar / cosmetic |
+| ABS check | NBA / State Board requirement and benefit sharing |
+| Prior art | matching research papers for a formulation |
+| Corpus | documents in the knowledge base |
+
+`backend/` FastAPI + RAG (retrieve → grade → answer → verify citations) · `frontend/` React · `markdown_output/` documents · `docs/` report
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| "Backend offline" in header | backend not running — check terminal 1 for errors |
-| `GROQ_API_KEY missing` | `.env` must be in `backend/` |
-| `429 Too Many Requests` from Jina | free-tier rate limit, it retries automatically |
-| Port 8000 in use | `lsof -ti:8000 \| xargs kill` then rerun |
-| Answer abstains on international question | no international documents yet — expected |
-| Windows: `./run.sh` doesn't work | run the two commands from step 4 manually in two terminals |
+| "Backend offline" or "Could not reach the backend" | look at the terminal running `run.sh`; usually a wrong key in `backend/.env` |
+| Groq `401` | new key from console.groq.com |
+| Jina `401` | new key from jina.ai/embeddings · `429` is normal, it retries |
+| Port 8000 in use | `lsof -ti:8000 \| xargs kill` |
