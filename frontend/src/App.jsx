@@ -5,6 +5,8 @@ import Classify from "./components/Classify.jsx";
 import PriorArt from "./components/PriorArt.jsx";
 import AbsCheck from "./components/AbsCheck.jsx";
 import Sources from "./components/Sources.jsx";
+import Segmented from "./components/Segmented.jsx";
+import VoiceButton from "./components/VoiceButton.jsx";
 
 const JURISDICTIONS = ["India", "International", "Both"];
 const TABS = ["Ask", "Classify product", "ABS check", "Prior art", "Corpus"];
@@ -103,19 +105,7 @@ export default function App() {
             {/* Jurisdiction toggle */}
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm text-ink-soft">Which law applies?</span>
-              <div className="inline-flex rounded-md border border-leaf overflow-hidden">
-                {JURISDICTIONS.map((j) => (
-                  <button
-                    key={j}
-                    onClick={() => setJurisdiction(j)}
-                    className={`px-3 py-1.5 text-sm font-semibold ${
-                      jurisdiction === j ? "bg-leaf text-paper" : "bg-paper text-leaf hover:bg-sage"
-                    }`}
-                  >
-                    {j}
-                  </button>
-                ))}
-              </div>
+              <Segmented options={JURISDICTIONS} value={jurisdiction} onChange={setJurisdiction} />
               {jurisdiction === "Both" && (
                 <span className="text-xs text-ink-soft">Indian and international answers are shown separately.</span>
               )}
@@ -163,13 +153,16 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-                <button
-                  onClick={() => ask()}
-                  disabled={loading || !query.trim()}
-                  className="shrink-0 text-sm font-semibold px-5 py-2 rounded-md bg-leaf text-paper disabled:opacity-40"
-                >
-                  {loading ? "Searching…" : "Get answer"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <VoiceButton lang={lang} onResult={(t) => { setQuery(t); ask(t); }} />
+                  <button
+                    onClick={() => ask()}
+                    disabled={loading || !query.trim()}
+                    className="shrink-0 text-sm font-semibold px-5 py-2 rounded-md bg-leaf text-paper disabled:opacity-40"
+                  >
+                    {loading ? "Searching…" : "Get answer"}
+                  </button>
+                </div>
               </div>
             </div>
 

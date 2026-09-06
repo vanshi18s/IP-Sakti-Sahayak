@@ -247,12 +247,18 @@ def answer_question(query: str, jurisdiction: str | None = None) -> dict:
     if not used_ids and raw and "could not find" not in raw.lower():
         cleaned, used_ids = raw, list(range(1, len(graded) + 1))
 
-    # bge-m3 cosine sims typically sit in 0.4-0.8; rescale to 0-1
+    # Confidence = how strong was retrieval × how many passages survived grading × how many the answer used
     avg_score = sum(c["score"] for c in graded) / len(graded)
-    scaled = max(0.0, min(1.0, (avg_score - 0.35) / 0.4))
-    cite_ratio = len(used_ids) / len(graded)
-    confidence = round(0.5 * scaled + 0.5 * cite_ratio, 3)
+    retrieval = max(0.0, min(1.0, (avg_score - 0.35) / 0.4))     # bge-m3 cosine 0.35..0.75 -> 0..1
+    grader_ratio = len(graded) / max(len(chunks), 1)               # relevant / retrieved
+    cite_coverage = len(used_ids) / len(graded)                    # cited / relevant
+    confidence = round(0.4 * retrieval + 0.3 * grader_ratio + 0.3 * cite_coverage, 3)
     abstained = (not used_ids) or ("could not find" in raw.lower())
+    breakdown = {
+        "retrieval_strength": round(retrieval, 2),
+        "passages_relevant": f"{len(graded)}/{len(chunks)}",
+        "sources_cited": f"{len(used_ids)}/{len(graded)}",
+    }
 
     sources = []
     for i, c in enumerate(graded, start=1):
@@ -268,7 +274,8 @@ def answer_question(query: str, jurisdiction: str | None = None) -> dict:
     return {
         "answer": cleaned if not abstained else
                   "Confidence is too low to answer reliably. Please consult the sources below or escalate.",
-        "abstained": abstained, "confidence": confidence, "sources": sources,
+        "abstained": abstained, "confidence": confidence, "confidence_breakdown": breakdown,
+        "sources": sources,
         "rewritten_query": rewritten, "disclaimer": config.DISCLAIMER,
     }
 

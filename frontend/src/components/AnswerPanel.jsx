@@ -16,16 +16,21 @@ function renderAnswer(text, onCite) {
   });
 }
 
-function Confidence({ value, abstained }) {
+function Confidence({ value, abstained, breakdown }) {
   const pct = Math.round(value * 100);
   const label = abstained ? "Abstained" : pct >= 70 ? "High" : pct >= 45 ? "Medium" : "Low";
+  const tip = breakdown
+    ? `Retrieval strength ${Math.round(breakdown.retrieval_strength * 100)}% · ` +
+      `Relevant passages ${breakdown.passages_relevant} · Sources cited ${breakdown.sources_cited}`
+    : "";
   return (
-    <div className="flex items-center gap-2 text-xs text-ink-soft">
+    <div className="flex items-center gap-2 text-xs text-ink-soft" title={tip}>
       <span>Confidence</span>
       <div className="w-24 h-1.5 bg-sage-deep rounded-full overflow-hidden">
-        <div className="h-full bg-saffron" style={{ width: `${pct}%` }} />
+        <div className="h-full bg-saffron transition-[width] duration-500" style={{ width: `${pct}%` }} />
       </div>
       <span className="font-semibold text-ink">{label} · {pct}%</span>
+      {breakdown && <span className="text-[11px] underline decoration-dotted cursor-help">why?</span>}
     </div>
   );
 }
@@ -49,7 +54,7 @@ export default function AnswerPanel({ title, result, query, loading, error }) {
     <section className="bg-paper/70 border border-sage-deep rounded-lg p-4 flex flex-col gap-3 min-h-40">
       <div className="flex items-center justify-between">
         <h3 className="text-lg text-leaf">{title}</h3>
-        {result && <Confidence value={result.confidence} abstained={result.abstained} />}
+        {result && <Confidence value={result.confidence} abstained={result.abstained} breakdown={result.confidence_breakdown} />}
       </div>
 
       {loading && <p className="text-sm text-ink-soft">Reading the statutes…</p>}
