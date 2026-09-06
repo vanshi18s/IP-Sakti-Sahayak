@@ -9,12 +9,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal, Optional
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 import config
+import auth
+from auth import UserOut, current_user, require_role
 from classify import QUESTIONS, classify
+from compare import compare_answers
+from review import review_document
 from abs_check import QUESTIONS as ABS_QUESTIONS, abs_check
 from prior_art import search_prior_art
 from rag import answer_question, _collection
@@ -30,6 +34,7 @@ app.add_middleware(
 )
 
 LOG_FILE = Path(__file__).parent / "audit_log.jsonl"
+auth.init_db()
 
 
 def _audit(event: str, payload: dict):
@@ -62,6 +67,27 @@ class EscalateRequest(BaseModel):
     contact: Optional[str] = None
 
 
+# ---------- auth routes ----------
+
+@app.post("/auth/register", response_model=UserOut)
+def auth_register(data: auth.RegisterIn):
+    user = auth.register(data)
+    _audit("register", {"user_id": user.id, "role": user.role})
+    return user
+
+
+@app.post("/auth/login")
+def auth_login(data: auth.LoginIn):
+    out = auth.login(data)
+    _audit("login", {"user_id": out["user"].id})
+    return out
+
+
+@app.get("/auth/me", response_model=UserOut)
+def auth_me(user: UserOut = Depends(auth.require_user)):
+    return user
+
+
 # ---------- routes ----------
 
 @app.get("/health")
@@ -70,7 +96,7 @@ def health():
 
 
 @app.post("/chat")
-def chat(req: ChatRequest):
+def chat(req: ChatRequest, user: Optional[UserOut] = Depends(current_user)):
     # 1. translate in (auto-detect if lang == "auto")
     src = None if req.lang in ("auto", "", None) else req.lang
     q_en, detected = to_english(req.query, src)
@@ -87,7 +113,8 @@ def chat(req: ChatRequest):
     result["jurisdiction"] = req.jurisdiction
     result["language"] = detected
     result["query_en"] = q_en
-    _audit("chat", {"query": req.query, "lang": detected, "jurisdiction": req.jurisdiction,
+    _audit("chat", {"user_id": user.id if user else None, "query": req.query, "lang": detected,
+                    "jurisdiction": req.jurisdiction,
                     "confidence": result["confidence"], "abstained": result["abstained"]})
     return result
 
@@ -137,6 +164,40 @@ def sources():
 
 
 @app.post("/escalate")
-def escalate(req: EscalateRequest):
-    _audit("escalate", req.model_dump())
+def escalate(req: EscalateRequest, user: UserOut = Depends(auth.require_user)):
+    _audit("escalate", {"user_id": user.id, "email": user.email, **req.model_dump()})
     return {"status": "logged", "message": "Your query has been queued for a human IP facilitator."}
+
+
+@app.get("/escalations")
+def escalations(user: UserOut = Depends(require_role("facilitator", "admin"))):
+    """Facilitators see the queue of escalated questions."""
+    if not LOG_FILE.exists():
+        return []
+    rows = [json.loads(l) for l in LOG_FILE.read_text(encoding="utf-8").splitlines() if l.strip()]
+    return [r for r in rows if r.get("event") == "escalate"][::-1]
+
+
+# ---------- document review + compare ----------
+
+@app.post("/review")
+async def review(file: UploadFile = File(...), jurisdiction: str = Form("India"),
+                 user: Optional[UserOut] = Depends(current_user)):
+    data = await file.read()
+    if len(data) > 5 * 1024 * 1024:
+        return {"error": "File too large (max 5 MB)."}
+    result = review_document(file.filename, data, jurisdiction)
+    _audit("review", {"user_id": user.id if user else None, "filename": file.filename,
+                      "findings": result.get("areas_with_findings", [])})
+    return result
+
+
+class CompareRequest(BaseModel):
+    question: str
+    india: str
+    international: str
+
+
+@app.post("/compare")
+def compare(req: CompareRequest):
+    return {"differences": compare_answers(req.question, req.india, req.international)}

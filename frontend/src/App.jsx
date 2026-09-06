@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "./api.js";
+import { api, token } from "./api.js";
 import AnswerPanel from "./components/AnswerPanel.jsx";
 import Classify from "./components/Classify.jsx";
 import PriorArt from "./components/PriorArt.jsx";
@@ -7,9 +7,13 @@ import AbsCheck from "./components/AbsCheck.jsx";
 import Sources from "./components/Sources.jsx";
 import Segmented from "./components/Segmented.jsx";
 import VoiceButton from "./components/VoiceButton.jsx";
+import Auth from "./components/Auth.jsx";
+import Escalations from "./components/Escalations.jsx";
+import Review from "./components/Review.jsx";
+import { exportQA } from "./report.js";
 
 const JURISDICTIONS = ["India", "International", "Both"];
-const TABS = ["Ask", "Classify product", "ABS check", "Prior art", "Corpus"];
+const TABS = ["Ask", "Review document", "Classify product", "ABS check", "Prior art", "Corpus"];
 const LANGS = [
   ["auto", "Auto-detect"], ["en", "English"], ["hi", "हिन्दी"], ["mr", "मराठी"], ["ta", "தமிழ்"],
   ["te", "తెలుగు"], ["kn", "ಕನ್ನಡ"], ["ml", "മലയാളം"], ["bn", "বাংলা"], ["gu", "ગુજરાતી"],
@@ -31,13 +35,25 @@ export default function App() {
   const [category, setCategory] = useState(null);
   const [results, setResults] = useState({});   // { India: {...}, International: {...} }
   const [history, setHistory] = useState([]);   // [{query, jurisdiction, results}]
+  const [differences, setDifferences] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [health, setHealth] = useState(null);
+  const [user, setUser] = useState(null);           // logged-in user or null
+  const [authState, setAuthState] = useState("checking"); // checking | login | ready
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => setHealth({ status: "down" }));
+    if (token.get()) {
+      api.me().then((u) => { setUser(u); setAuthState("ready"); })
+              .catch(() => { token.clear(); setAuthState("login"); });
+    } else {
+      setAuthState("login");
+    }
   }, []);
+
+  const signOut = () => { token.clear(); setUser(null); setAuthState("login"); };
+  const tabs = user?.role === "facilitator" || user?.role === "admin" ? [...TABS, "Escalations"] : TABS;
 
   const ask = async (q = query) => {
     if (!q.trim()) return;
@@ -49,12 +65,17 @@ export default function App() {
     setLoading(true);
     setError(false);
     setResults({});
+    setDifferences("");
     const targets = jurisdiction === "Both" ? ["India", "International"] : [jurisdiction];
     try {
       const out = await Promise.all(targets.map((j) => api.chat(q, j, category?.name, lang)));
       const next = {};
       targets.forEach((j, i) => (next[j] = out[i]));
       setResults(next);
+      if (targets.length === 2) {
+        api.compare(q, next.India.answer_en || next.India.answer, next.International.answer_en || next.International.answer)
+           .then((r) => setDifferences(r.differences)).catch(() => {});
+      }
     } catch {
       setError(true);
     } finally {
@@ -80,14 +101,36 @@ export default function App() {
               ? `Corpus loaded · ${health.chunks_in_corpus} passages`
               : "Backend offline"}
             {category && <div className="text-saffron font-semibold mt-0.5">Product: {category.name}</div>}
+            <div className="mt-1">
+              {user ? (
+                <>
+                  <span className="text-ink font-semibold">{user.name}</span>
+                  <span> · {user.role}</span>
+                  <button onClick={signOut} className="ml-2 underline underline-offset-2">Sign out</button>
+                </>
+              ) : authState === "ready" ? (
+                <button onClick={() => setAuthState("login")} className="underline underline-offset-2">Sign in</button>
+              ) : null}
+            </div>
           </div>
         </div>
       </header>
 
+      {authState === "checking" && (
+        <main className="flex-1 flex items-center justify-center text-sm text-ink-soft">Loading…</main>
+      )}
+
+      {authState === "login" && (
+        <main className="flex-1 flex items-center justify-center px-5 py-10">
+          <Auth onAuth={(u) => { setUser(u); setAuthState("ready"); }} onSkip={() => setAuthState("ready")} />
+        </main>
+      )}
+
+      {authState === "ready" && (
       <main className="max-w-6xl w-full mx-auto px-5 py-6 flex-1 flex flex-col gap-6">
         {/* Tabs */}
         <nav className="flex gap-1 border-b border-sage-deep">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -168,26 +211,51 @@ export default function App() {
 
             {/* Answers */}
             {(asked || loading) && (
-              <div className={`grid gap-4 ${panels.length === 2 ? "md:grid-cols-2" : "grid-cols-1"}`}>
-                {panels.map((j) => (
-                  <AnswerPanel
-                    key={j}
-                    title={j === "India" ? "Under Indian law" : "Under international regimes"}
-                    result={results[j]}
-                    query={asked}
-                    loading={loading}
-                    error={error}
-                  />
-                ))}
-              </div>
+              <>
+                <div className={`grid gap-4 ${panels.length === 2 ? "md:grid-cols-2" : "grid-cols-1"}`}>
+                  {panels.map((j) => (
+                    <AnswerPanel
+                      key={j}
+                      title={j === "India" ? "Under Indian law" : "Under international regimes"}
+                      result={results[j]}
+                      query={asked}
+                      loading={loading}
+                      error={error}
+                    />
+                  ))}
+                </div>
+
+                {panels.length === 2 && Object.keys(results).length === 2 && (
+                  <section className="border-l-4 border-saffron bg-paper rounded-r-md p-4">
+                    <h3 className="text-lg text-leaf">Key differences</h3>
+                    <p className="text-sm whitespace-pre-wrap mt-1">
+                      {differences || "Comparing the two answers…"}
+                    </p>
+                  </section>
+                )}
+
+                {Object.keys(results).length > 0 && !loading && (
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => exportQA({ question: asked, results, user, differences })}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-md border border-leaf text-leaf hover:bg-leaf hover:text-paper"
+                    >
+                      Download report (PDF)
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
+
+        {tab === "Review document" && <Review user={user} />}
 
         {tab === "Classify product" && <Classify onDone={setCategory} />}
         {tab === "ABS check" && <AbsCheck />}
         {tab === "Prior art" && <PriorArt />}
         {tab === "Corpus" && <Sources />}
+        {tab === "Escalations" && <Escalations />}
 
         {/* Earlier questions in this session */}
         {tab === "Ask" && history.length > 0 && (
@@ -213,6 +281,7 @@ export default function App() {
           </div>
         )}
       </main>
+      )}
 
       <footer className="border-t border-sage-deep">
         <div className="max-w-6xl mx-auto px-5 py-3 text-[11px] text-ink-soft flex justify-between">

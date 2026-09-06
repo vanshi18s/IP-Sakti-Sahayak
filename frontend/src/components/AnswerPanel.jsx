@@ -39,6 +39,7 @@ function Confidence({ value, abstained, breakdown }) {
 export default function AnswerPanel({ title, result, query, loading, error }) {
   const [hover, setHover] = useState(null);
   const [escalated, setEscalated] = useState(false);
+  const [escError, setEscError] = useState("");
 
   const scrollTo = (id) => {
     setHover(id);
@@ -46,8 +47,13 @@ export default function AnswerPanel({ title, result, query, loading, error }) {
   };
 
   const escalate = async () => {
-    await api.escalate(query, "user requested human review");
-    setEscalated(true);
+    try {
+      await api.escalate(query, "user requested human review");
+      setEscalated(true);
+      setEscError("");
+    } catch (e) {
+      setEscError(e.message === "Login required" ? "Sign in to escalate this question." : e.message);
+    }
   };
 
   return (
@@ -83,7 +89,7 @@ export default function AnswerPanel({ title, result, query, loading, error }) {
           )}
 
           <div className="flex items-center justify-between mt-auto pt-2 border-t border-sage-deep">
-            <p className="text-[11px] text-ink-soft max-w-[70%]">{result.disclaimer}</p>
+            <p className="text-[11px] text-ink-soft max-w-[70%]">{escError || result.disclaimer}</p>
             <button
               onClick={escalate}
               disabled={escalated}
