@@ -1,0 +1,35 @@
+name: Sync to Hugging Face Space
+
+# Every push to main (code or data) is mirrored to the Space, which then rebuilds
+# and re-ingests. PDFs are skipped (HF rejects plain binaries) - upload those via
+# the Space's Files tab; they survive because we merge the Space's own state in.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: Prakharpandey31/ip-sakti-sahayak-api
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git remote add hf "https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}"
+          git fetch hf main || true
+          git checkout --orphan hf-tmp
+          git rm -r --cached . -q
+          git add -A
+          git reset -q -- 'data/raw/*.pdf' '**/*.pdf' 2>/dev/null || true
+          git commit -qm "Sync from GitHub: ${GITHUB_SHA::7}"
+          git merge -q --allow-unrelated-histories -X ours hf/main -m "keep space files" || true
+          git push hf hf-tmp:main --force

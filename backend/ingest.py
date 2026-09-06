@@ -54,30 +54,80 @@ def _tag_words(text: str):
             yield w, section
 
 
-def load_metadata(pdf_path: Path) -> dict:
-    meta_path = pdf_path.with_suffix(".json")
+def _manifest_rows():
+    """Optional data/raw/manifest.csv: filename,doc,jurisdiction,doc_type,version_date,url"""
+    path = config.RAW_DIR / "manifest.csv"
+    if not path.exists():
+        return {}
+    import csv
+    rows = {}
+    with open(path, encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f):
+            name = (r.get("filename") or "").strip()
+            if name:
+                rows[name] = {k: (v or "").strip() for k, v in r.items() if k != "filename"}
+    return rows
+
+
+def _first_heading(text: str) -> str | None:
+    for line in text.splitlines()[:20]:
+        m = re.match(r"^\s*#+\s*(.+?)\s*$", line)
+        if m:
+            return m.group(1).replace("*", "").strip()[:120]
+    return None
+
+
+def load_metadata(src_path: Path, text_head: str = "") -> dict:
+    meta_path = src_path.with_suffix(".json")
     defaults = {
-        "doc": pdf_path.stem.replace("_", " ").title(),
+        "doc": _first_heading(text_head) or src_path.stem.replace("_", " ").title(),
         "jurisdiction": "India",
         "doc_type": "statute",
         "version_date": "unknown",
         "url": "",
     }
+    manifest = _manifest_rows()
     if meta_path.exists():
         defaults.update(json.loads(meta_path.read_text(encoding="utf-8")))
+    elif src_path.name in manifest:
+        defaults.update({k: v for k, v in manifest[src_path.name].items() if v})
     else:
-        print(f"  [warn] no metadata json for {pdf_path.name}; using defaults")
+        print(f"  [info] no manifest row for {src_path.name}; using heading/defaults")
     return defaults
 
 
-def extract_pages(pdf_path: Path):
-    reader = PdfReader(str(pdf_path))
-    for i, page in enumerate(reader.pages, start=1):
-        text = page.extract_text() or ""
-        text = re.sub(r"[ \t]+", " ", text)
-        text = re.sub(r"\n{3,}", "\n\n", text)
-        if text.strip():
-            yield i, text
+def _clean_md(text: str) -> str:
+    text = text.replace("\r\n", "\n")
+    text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.M)      # drop heading hashes
+    text = text.replace("**", "").replace("__", "")
+    text = re.sub(r"^\s*\|?[-:| ]+\|?\s*$", "", text, flags=re.M)   # table separator rows
+    text = re.sub(r"\|", " | ", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text
+
+
+def extract_pages(src_path: Path):
+    """Yield (page_no, text). PDFs give real pages; .md/.txt are split into ~1500-word pseudo-pages."""
+    if src_path.suffix.lower() == ".pdf":
+        reader = PdfReader(str(src_path))
+        for i, page in enumerate(reader.pages, start=1):
+            text = page.extract_text() or ""
+            text = re.sub(r"[ \t]+", " ", text)
+            text = re.sub(r"\n{3,}", "\n\n", text)
+            if text.strip():
+                yield i, text
+        return
+    text = _clean_md(src_path.read_text(encoding="utf-8", errors="ignore"))
+    lines, buf, count, page = text.split("\n"), [], 0, 1
+    for line in lines:
+        buf.append(line)
+        count += len(line.split())
+        if count >= 1500 and (not line.strip() or SECTION_RE.match(line)):
+            yield page, "\n".join(buf)
+            buf, count, page = [], 0, page + 1
+    if buf:
+        yield page, "\n".join(buf)
 
 
 def chunk_page(text: str, words_per_chunk: int, overlap: int):
@@ -95,11 +145,14 @@ def chunk_page(text: str, words_per_chunk: int, overlap: int):
             break
 
 
-def build_chunks(pdf_path: Path):
-    meta = load_metadata(pdf_path)
+def build_chunks(src_path: Path):
+    head = ""
+    if src_path.suffix.lower() != ".pdf":
+        head = src_path.read_text(encoding="utf-8", errors="ignore")[:2000]
+    meta = load_metadata(src_path, head)
     docs, metas, ids = [], [], []
     n = 0
-    for page_no, text in extract_pages(pdf_path):
+    for page_no, text in extract_pages(src_path):
         for chunk, section in chunk_page(text, config.CHUNK_WORDS, config.CHUNK_OVERLAP):
             n += 1
             docs.append(chunk)
@@ -107,10 +160,23 @@ def build_chunks(pdf_path: Path):
                 **meta,
                 "section": section or "n/a",
                 "page": page_no,
-                "source_file": pdf_path.name,
+                "source_file": src_path.name,
             })
-            ids.append(f"{pdf_path.stem}__p{page_no}__c{n}")
+            ids.append(f"{src_path.stem}__p{page_no}__c{n}")
     return docs, metas, ids
+
+
+SUPPORTED = {".pdf", ".md", ".txt"}
+
+
+def find_sources():
+    """All PDFs / markdown / text under data/raw and markdown_output (recursive)."""
+    roots = [config.RAW_DIR, config.RAW_DIR.parent.parent / "markdown_output"]
+    files = []
+    for root in roots:
+        if root.exists():
+            files += [p for p in root.rglob("*") if p.suffix.lower() in SUPPORTED and p.is_file()]
+    return sorted(set(files))
 
 
 def main():
@@ -122,9 +188,9 @@ def main():
         shutil.rmtree(config.CHROMA_DIR)
         print(f"Deleted {config.CHROMA_DIR}")
 
-    pdfs = sorted(config.RAW_DIR.glob("*.pdf"))
-    if not pdfs:
-        print(f"No PDFs found in {config.RAW_DIR}. Put at least one PDF there.")
+    sources = find_sources()
+    if not sources:
+        print(f"No documents found in {config.RAW_DIR} or markdown_output/. Add PDF/MD files.")
         sys.exit(1)
 
     print(f"Loading embedding model {config.EMBED_MODEL} (first run downloads ~2GB)...")
@@ -136,9 +202,9 @@ def main():
     )
 
     total = 0
-    for pdf in pdfs:
-        print(f"Processing {pdf.name} ...")
-        docs, metas, ids = build_chunks(pdf)
+    for src in sources:
+        print(f"Processing {src.relative_to(config.RAW_DIR.parent.parent)} ...")
+        docs, metas, ids = build_chunks(src)
         if not docs:
             print("  [skip] no extractable text (scanned PDF? run OCR first)")
             continue
