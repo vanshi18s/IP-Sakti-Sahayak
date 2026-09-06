@@ -61,6 +61,13 @@ export default function AnswerPanel({ title, result, query, loading, error }) {
             {renderAnswer(result.answer, scrollTo)}
           </div>
 
+          {result.answer_en && (
+            <details className="text-sm text-ink-soft">
+              <summary className="cursor-pointer text-xs font-semibold">Show English original</summary>
+              <div className="answer mt-2">{renderAnswer(result.answer_en, scrollTo)}</div>
+            </details>
+          )}
+
           {result.sources?.length > 0 && (
             <div className="flex flex-col gap-2 mt-1">
               <span className="text-xs font-semibold text-ink-soft">Sources cited</span>

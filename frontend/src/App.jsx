@@ -3,9 +3,14 @@ import { api } from "./api.js";
 import AnswerPanel from "./components/AnswerPanel.jsx";
 import Classify from "./components/Classify.jsx";
 import PriorArt from "./components/PriorArt.jsx";
+import AbsCheck from "./components/AbsCheck.jsx";
 
 const JURISDICTIONS = ["India", "International", "Both"];
-const TABS = ["Ask", "Classify product", "Prior art"];
+const TABS = ["Ask", "Classify product", "ABS check", "Prior art"];
+const LANGS = [
+  ["auto", "Auto-detect"], ["en", "English"], ["hi", "हिन्दी"], ["mr", "मराठी"], ["ta", "தமிழ்"],
+  ["te", "తెలుగు"], ["kn", "ಕನ್ನಡ"], ["ml", "മലയാളം"], ["bn", "বাংলা"], ["gu", "ગુજરાતી"],
+];
 
 const EXAMPLES = [
   "Can a classical Ayurvedic formulation be patented in India?",
@@ -17,6 +22,7 @@ const EXAMPLES = [
 export default function App() {
   const [tab, setTab] = useState(TABS[0]);
   const [jurisdiction, setJurisdiction] = useState("India");
+  const [lang, setLang] = useState("auto");
   const [query, setQuery] = useState("");
   const [asked, setAsked] = useState("");
   const [category, setCategory] = useState(null);
@@ -37,7 +43,7 @@ export default function App() {
     setResults({});
     const targets = jurisdiction === "Both" ? ["India", "International"] : [jurisdiction];
     try {
-      const out = await Promise.all(targets.map((j) => api.chat(q, j, category?.name)));
+      const out = await Promise.all(targets.map((j) => api.chat(q, j, category?.name, lang)));
       const next = {};
       targets.forEach((j, i) => (next[j] = out[i]));
       setResults(next);
@@ -107,6 +113,18 @@ export default function App() {
               {jurisdiction === "Both" && (
                 <span className="text-xs text-ink-soft">Indian and international answers are shown separately.</span>
               )}
+              <label className="ml-auto flex items-center gap-2 text-sm text-ink-soft">
+                Language
+                <select
+                  value={lang}
+                  onChange={(e) => setLang(e.target.value)}
+                  className="bg-paper border border-sage-deep rounded-md px-2 py-1 text-sm text-ink"
+                >
+                  {LANGS.map(([code, name]) => (
+                    <option key={code} value={code}>{name}</option>
+                  ))}
+                </select>
+              </label>
             </div>
 
             {/* Query box */}
@@ -168,6 +186,7 @@ export default function App() {
         )}
 
         {tab === "Classify product" && <Classify onDone={setCategory} />}
+        {tab === "ABS check" && <AbsCheck />}
         {tab === "Prior art" && <PriorArt />}
       </main>
 

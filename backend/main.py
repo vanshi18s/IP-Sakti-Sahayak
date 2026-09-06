@@ -15,8 +15,10 @@ from pydantic import BaseModel
 
 import config
 from classify import QUESTIONS, classify
+from abs_check import QUESTIONS as ABS_QUESTIONS, abs_check
 from prior_art import search_prior_art
 from rag import answer_question, _collection
+from translate import to_english, from_english
 
 app = FastAPI(title="IP-SAKTI Sahayak API", version="0.1.0")
 
@@ -41,7 +43,7 @@ def _audit(event: str, payload: dict):
 class ChatRequest(BaseModel):
     query: str
     jurisdiction: Optional[Literal["India", "International"]] = None
-    lang: str = "en"           # translation hook for later (Bhashini / IndicTrans2)
+    lang: str = "auto"         # "auto" detects script; or "en", "hi", "ta", ...
     category: Optional[str] = None
 
 
@@ -69,12 +71,23 @@ def health():
 
 @app.post("/chat")
 def chat(req: ChatRequest):
-    q = req.query
-    if req.category:
-        q = f"[Product category: {req.category}] {q}"
+    # 1. translate in (auto-detect if lang == "auto")
+    src = None if req.lang in ("auto", "", None) else req.lang
+    q_en, detected = to_english(req.query, src)
+
+    # 2. answer in English
+    q = f"[Product category: {req.category}] {q_en}" if req.category else q_en
     result = answer_question(q, req.jurisdiction)
+
+    # 3. translate out
+    if detected != "en":
+        result["answer_en"] = result["answer"]
+        result["answer"] = from_english(result["answer"], detected)
+
     result["jurisdiction"] = req.jurisdiction
-    _audit("chat", {"query": req.query, "jurisdiction": req.jurisdiction,
+    result["language"] = detected
+    result["query_en"] = q_en
+    _audit("chat", {"query": req.query, "lang": detected, "jurisdiction": req.jurisdiction,
                     "confidence": result["confidence"], "abstained": result["abstained"]})
     return result
 
@@ -82,6 +95,18 @@ def chat(req: ChatRequest):
 @app.get("/classify/questions")
 def classify_questions():
     return QUESTIONS
+
+
+@app.get("/abs/questions")
+def abs_questions():
+    return ABS_QUESTIONS
+
+
+@app.post("/abs")
+def abs_compliance(req: ClassifyRequest):
+    result = abs_check(req.answers)
+    _audit("abs", {"likely_requirement": result["likely_requirement"]})
+    return result
 
 
 @app.post("/classify")

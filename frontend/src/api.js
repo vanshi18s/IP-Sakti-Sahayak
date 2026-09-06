@@ -19,9 +19,11 @@ async function get(path) {
 
 export const api = {
   health: () => get("/health"),
-  chat: (query, jurisdiction, category) => post("/chat", { query, jurisdiction, category }),
+  chat: (query, jurisdiction, category, lang = "auto") => post("/chat", { query, jurisdiction, category, lang }),
   classifyQuestions: () => get("/classify/questions"),
   classify: (answers) => post("/classify", { answers }),
+  absQuestions: () => get("/abs/questions"),
+  absCheck: (answers) => post("/abs", { answers }),
   priorArt: (text) => post("/prior-art", { text, k: 8 }),
   sources: () => get("/sources"),
   escalate: (query, reason) => post("/escalate", { query, reason }),
