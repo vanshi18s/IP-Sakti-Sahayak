@@ -18,6 +18,7 @@ import auth
 from auth import UserOut, current_user, require_role
 from classify import QUESTIONS, classify
 from compare import compare_answers
+from fees import estimate
 from review import review_document
 from abs_check import QUESTIONS as ABS_QUESTIONS, abs_check
 from prior_art import search_prior_art
@@ -201,3 +202,23 @@ class CompareRequest(BaseModel):
 @app.post("/compare")
 def compare(req: CompareRequest):
     return {"differences": compare_answers(req.question, req.india, req.international)}
+
+
+# ---------- fee estimator ----------
+
+class FeeRequest(BaseModel):
+    ip_type: Literal["patent", "trademark", "gi"] = "patent"
+    applicant: Literal["small", "other"] = "small"
+    filing_mode: Literal["e", "physical"] = "e"
+    sheets: int = 30
+    claims: int = 10
+    examination: Literal["none", "normal", "expedited"] = "normal"
+    early_publication: bool = False
+    renewal_years: int = 0
+    tm_classes: int = 1
+    gi_authorised_users: int = 0
+
+
+@app.post("/fees")
+def fees(req: FeeRequest):
+    return estimate(**req.model_dump())
