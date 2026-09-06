@@ -3,8 +3,8 @@ backend/.env
 backend/audit_log.jsonl
 backend/eval_results.json
 backend/__pycache__/
-data/chroma_db/
 data/users.db
+data/raw/*.pdf
 frontend/node_modules/
 frontend/dist/
 frontend/.env

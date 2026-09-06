@@ -8,17 +8,12 @@ import csv
 from functools import lru_cache
 
 import chromadb
-from sentence_transformers import SentenceTransformer
 
 import config
+from embed import embed_docs, embed_query
 
 CSV_PATH = config.RAW_DIR / "ayurveda_drug_research_final.csv"
 COLL = "prior_art_articles"
-
-
-@lru_cache(maxsize=1)
-def _embedder():
-    return SentenceTransformer(config.EMBED_MODEL)
 
 
 @lru_cache(maxsize=1)
@@ -44,10 +39,10 @@ def _build(coll):
                 "year": row.get("Year") or "",
             })
             ids.append(f"art_{i}")
-    for s in range(0, len(docs), 512):
-        emb = _embedder().encode(docs[s:s + 512], normalize_embeddings=True).tolist()
-        coll.upsert(documents=docs[s:s + 512], embeddings=emb,
-                    metadatas=metas[s:s + 512], ids=ids[s:s + 512])
+    for s in range(0, len(docs), 256):
+        emb = embed_docs(docs[s:s + 256])
+        coll.upsert(documents=docs[s:s + 256], embeddings=emb,
+                    metadatas=metas[s:s + 256], ids=ids[s:s + 256])
     print(f"prior-art index built with {len(docs)} titles")
 
 
@@ -55,14 +50,9 @@ def search_prior_art(text: str, k: int = 8) -> list[dict]:
     coll = _collection()
     if coll.count() == 0:
         return []
-    emb = _embedder().encode([text], normalize_embeddings=True).tolist()
+    emb = [embed_query(text)]
     res = coll.query(query_embeddings=emb, n_results=k, include=["documents", "metadatas", "distances"])
     out = []
     for d, m, dist in zip(res["documents"][0], res["metadatas"][0], res["distances"][0]):
         out.append({"title": d, **m, "similarity": round(1 - dist, 3)})
     return out
-
-
-if __name__ == "__main__":
-    for r in search_prior_art("Tinospora cordifolia (Guduchi) extract for diabetes"):
-        print(r)

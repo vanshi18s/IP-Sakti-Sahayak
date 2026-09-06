@@ -22,7 +22,7 @@ from pydantic import BaseModel, EmailStr
 
 import config
 
-DB_PATH = (config.RAW_DIR.parent / "users.db")
+DB_PATH = Path(os.getenv("USERS_DB", str(config.RAW_DIR.parent / "users.db")))
 JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-.env")
 JWT_ALG = "HS256"
 TOKEN_HOURS = 24 * 7

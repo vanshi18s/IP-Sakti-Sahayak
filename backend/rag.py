@@ -13,15 +13,17 @@ from functools import lru_cache
 
 import chromadb
 from groq import Groq
-from sentence_transformers import SentenceTransformer
 
 import config
+from embed import embed_query
 
 # ---------- lazy singletons ----------
 
 @lru_cache(maxsize=1)
 def _embedder():
-    return SentenceTransformer(config.EMBED_MODEL)
+    """Kept for warm-up calls; the real work is in embed.py."""
+    embed_query("warm up")
+    return True
 
 
 @lru_cache(maxsize=1)
@@ -84,7 +86,7 @@ def retrieve(query: str, jurisdiction: str | None = None, top_k: int = config.TO
     where = {"jurisdiction": jurisdiction} if jurisdiction else None
 
     # vector leg
-    q_emb = _embedder().encode([query], normalize_embeddings=True).tolist()
+    q_emb = [embed_query(query)]
     res = _collection().query(query_embeddings=q_emb, n_results=fetch_n, where=where,
                               include=["documents", "metadatas", "distances"])
     vec_hits = {}

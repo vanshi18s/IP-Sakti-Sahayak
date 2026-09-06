@@ -20,7 +20,7 @@ jobs:
       - name: Push to Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_SPACE: Prakharpandey31/ip-sakti-sahayak-api
+          HF_SPACE: Prakharpandey31/ip-sakti-sahayak-backend
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"

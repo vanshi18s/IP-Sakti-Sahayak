@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: ip-sakti-sahayak-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements-lite.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: EMBED_BACKEND
+        value: jina
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: CHROMA_DIR
+        value: ../data/chroma_db
+      - key: RAW_DIR
+        value: ../data/raw
+      - key: GROQ_API_KEY
+        sync: false
+      - key: JINA_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false

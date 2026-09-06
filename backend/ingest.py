@@ -29,9 +29,9 @@ from pathlib import Path
 
 import chromadb
 from pypdf import PdfReader
-from sentence_transformers import SentenceTransformer
 
 import config
+from embed import embed_docs
 
 SECTION_RE = re.compile(
     r"^\s*(?:"
@@ -193,8 +193,7 @@ def main():
         print(f"No documents found in {config.RAW_DIR} or markdown_output/. Add PDF/MD files.")
         sys.exit(1)
 
-    print(f"Loading embedding model {config.EMBED_MODEL} (first run downloads ~2GB)...")
-    embedder = SentenceTransformer(config.EMBED_MODEL)
+    print(f"Embedding backend: {__import__('embed').BACKEND}")
 
     client = chromadb.PersistentClient(path=str(config.CHROMA_DIR))
     collection = client.get_or_create_collection(
@@ -211,7 +210,7 @@ def main():
         # Chroma limit is ~5k per add; batch it
         for i in range(0, len(docs), 256):
             batch_docs = docs[i:i + 256]
-            embeds = embedder.encode(batch_docs, normalize_embeddings=True).tolist()
+            embeds = embed_docs(batch_docs)
             collection.upsert(
                 documents=batch_docs,
                 embeddings=embeds,
