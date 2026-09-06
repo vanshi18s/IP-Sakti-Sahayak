@@ -39,14 +39,21 @@ cd ../frontend
 npm install
 ```
 
-**4. Run (every time)**
+**4. Build the knowledge base (once, ~5 minutes)**
+```bash
+cd ../backend
+python ingest.py --reset
+```
+Wait for "Done. Collection 'legal_corpus' now has N chunks". Repeat this whenever new documents are added.
+
+**5. Run (every time)**
 ```bash
 cd ..            # back to repo root
 ./run.sh
 ```
-Open http://localhost:5173. Header should say "Corpus loaded · 1764 passages". Done.
+Open http://localhost:5173. Header should say "Corpus loaded · N passages". Done.
 
-No model download, no ingestion — the vector database is already in the repo (`data/chroma_db`).
+No model download — embeddings come from the Jina API.
 
 ---
 
@@ -73,10 +80,9 @@ Sign in (any email + password) to escalate a question. Register as "IP facilitat
 3. Optional: add a row in `data/raw/manifest.csv` for link / version date / International:
    `filename,doc,jurisdiction,doc_type,version_date,url`
 4. Push to GitHub `main`.
-5. Tell Prakhar. He runs `python ingest.py --reset` (2–3 min) and pushes the updated `data/chroma_db`.
-6. Everyone else: `git pull`. Done.
+5. Everyone: `git pull`, then `cd backend && python ingest.py --reset` (5 min). Done.
 
-Only one person runs ingest (to avoid conflicts). Scanned PDFs give empty `.md` — OCR them first.
+Scanned PDFs give empty `.md` — OCR them first.
 
 **Priority documents still needed:**
 - Regulatory: Drugs & Cosmetics Act 1940 + Rules 1945, Drugs & Magic Remedies Act 1954, FSSAI Ayurveda Aahar Regulations 2022, Biological Diversity Act 2002 (2023 amendment) + Rules 2024
