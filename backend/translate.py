@@ -79,11 +79,15 @@ def to_english(text: str, src: str | None = None) -> tuple[str, str]:
     return fn(text, src, "en"), src
 
 
+FULLWIDTH_CITE = re.compile(r"[【\[]\s*(\d+)\s*[】\]]")
+
+
 def from_english(text: str, tgt: str) -> str:
     if tgt == "en" or config.TRANSLATE_BACKEND == "none" or not text:
         return text
     fn = _bhashini_translate if config.TRANSLATE_BACKEND == "bhashini" else _llm_translate
-    return fn(text, "en", tgt)
+    out = fn(text, "en", tgt)
+    return FULLWIDTH_CITE.sub(r"[\1]", out)   # translators often swap brackets for 【】
 
 
 if __name__ == "__main__":

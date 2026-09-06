@@ -4,9 +4,10 @@ import AnswerPanel from "./components/AnswerPanel.jsx";
 import Classify from "./components/Classify.jsx";
 import PriorArt from "./components/PriorArt.jsx";
 import AbsCheck from "./components/AbsCheck.jsx";
+import Sources from "./components/Sources.jsx";
 
 const JURISDICTIONS = ["India", "International", "Both"];
-const TABS = ["Ask", "Classify product", "ABS check", "Prior art"];
+const TABS = ["Ask", "Classify product", "ABS check", "Prior art", "Corpus"];
 const LANGS = [
   ["auto", "Auto-detect"], ["en", "English"], ["hi", "हिन्दी"], ["mr", "मराठी"], ["ta", "தமிழ்"],
   ["te", "తెలుగు"], ["kn", "ಕನ್ನಡ"], ["ml", "മലയാളം"], ["bn", "বাংলা"], ["gu", "ગુજરાતી"],
@@ -27,6 +28,7 @@ export default function App() {
   const [asked, setAsked] = useState("");
   const [category, setCategory] = useState(null);
   const [results, setResults] = useState({});   // { India: {...}, International: {...} }
+  const [history, setHistory] = useState([]);   // [{query, jurisdiction, results}]
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [health, setHealth] = useState(null);
@@ -37,6 +39,10 @@ export default function App() {
 
   const ask = async (q = query) => {
     if (!q.trim()) return;
+    // push the previous answer into history before asking a new one
+    if (asked && Object.keys(results).length) {
+      setHistory((h) => [{ query: asked, jurisdiction, results }, ...h]);
+    }
     setAsked(q);
     setLoading(true);
     setError(false);
@@ -188,6 +194,31 @@ export default function App() {
         {tab === "Classify product" && <Classify onDone={setCategory} />}
         {tab === "ABS check" && <AbsCheck />}
         {tab === "Prior art" && <PriorArt />}
+        {tab === "Corpus" && <Sources />}
+
+        {/* Earlier questions in this session */}
+        {tab === "Ask" && history.length > 0 && (
+          <div className="flex flex-col gap-3 mt-4">
+            <h2 className="text-lg text-ink-soft">Earlier in this session</h2>
+            {history.map((h, i) => (
+              <details key={i} className="bg-paper/50 border border-sage-deep rounded-lg p-3">
+                <summary className="cursor-pointer text-sm font-semibold">
+                  {h.query} <span className="text-ink-soft font-normal">· {h.jurisdiction}</span>
+                </summary>
+                <div className={`grid gap-4 mt-3 ${Object.keys(h.results).length === 2 ? "md:grid-cols-2" : ""}`}>
+                  {Object.entries(h.results).map(([j, r]) => (
+                    <AnswerPanel
+                      key={j}
+                      title={j === "India" ? "Under Indian law" : "Under international regimes"}
+                      result={r}
+                      query={h.query}
+                    />
+                  ))}
+                </div>
+              </details>
+            ))}
+          </div>
+        )}
       </main>
 
       <footer className="border-t border-sage-deep">
