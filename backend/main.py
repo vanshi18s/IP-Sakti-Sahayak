@@ -9,9 +9,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal, Optional
 
-from fastapi import Depends, FastAPI, File, Form, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 import config
 import auth
@@ -19,6 +22,8 @@ from auth import UserOut, current_user, require_role
 from classify import QUESTIONS, classify
 from compare import compare_answers
 from fees import estimate
+from fuzzy import lookup as fuzzy_lookup
+from guardrails import check as guardrail_check
 from review import review_document
 from abs_check import QUESTIONS as ABS_QUESTIONS, abs_check
 from prior_art import search_prior_art
@@ -26,6 +31,11 @@ from rag import answer_question, _collection
 from translate import to_english, from_english
 
 app = FastAPI(title="IP-SAKTI Sahayak API", version="0.1.0")
+
+# Rate limiting (per client IP). Production: put Cloudflare WAF in front as well.
+limiter = Limiter(key_func=get_remote_address, default_limits=["120/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -97,16 +107,27 @@ def health():
 
 
 @app.post("/chat")
-def chat(req: ChatRequest, user: Optional[UserOut] = Depends(current_user)):
+@limiter.limit("20/minute")
+def chat(request: Request, req: ChatRequest, user: Optional[UserOut] = Depends(current_user)):
     # 1. translate in (auto-detect if lang == "auto")
     src = None if req.lang in ("auto", "", None) else req.lang
     q_en, detected = to_english(req.query, src)
 
-    # 2. answer in English
+    # 2. guardrails: intent tagging + scope check
+    gate = guardrail_check(q_en)
+    if not gate["allowed"]:
+        msg = from_english(gate["message"], detected) if detected != "en" else gate["message"]
+        _audit("chat_refused", {"user_id": user.id if user else None, "query": req.query, "intent": gate["intent"]})
+        return {"answer": msg, "abstained": True, "refused": True, "intent": gate["intent"],
+                "confidence": 0.0, "sources": [], "jurisdiction": req.jurisdiction, "language": detected,
+                "disclaimer": config.DISCLAIMER}
+
+    # 3. answer in English
     q = f"[Product category: {req.category}] {q_en}" if req.category else q_en
     result = answer_question(q, req.jurisdiction)
+    result["intent"] = gate["intent"]
 
-    # 3. translate out
+    # 4. translate out
     if detected != "en":
         result["answer_en"] = result["answer"]
         result["answer"] = from_english(result["answer"], detected)
@@ -222,3 +243,15 @@ class FeeRequest(BaseModel):
 @app.post("/fees")
 def fees(req: FeeRequest):
     return estimate(**req.model_dump())
+
+
+# ---------- fuzzy name lookup ----------
+
+class LookupRequest(BaseModel):
+    name: str
+    k: int = 8
+
+
+@app.post("/lookup")
+def name_lookup(req: LookupRequest):
+    return fuzzy_lookup(req.name, req.k)

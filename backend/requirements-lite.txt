@@ -1,4 +1,4 @@
-# Lightweight backend: embeddings via Jina API, no torch. Fits Render free tier (512 MB).
+# Lightweight backend: embeddings via Jina API, no torch.
 fastapi
 uvicorn[standard]
 python-multipart
@@ -12,3 +12,6 @@ pydantic[email]
 rank-bm25
 bcrypt
 PyJWT
+rapidfuzz
+unidecode
+slowapi

@@ -10,10 +10,11 @@ import VoiceButton from "./components/VoiceButton.jsx";
 import Auth from "./components/Auth.jsx";
 import Escalations from "./components/Escalations.jsx";
 import Review from "./components/Review.jsx";
+import Fees from "./components/Fees.jsx";
 import { exportQA } from "./report.js";
 
 const JURISDICTIONS = ["India", "International", "Both"];
-const TABS = ["Ask", "Review document", "Classify product", "ABS check", "Prior art", "Corpus"];
+const TABS = ["Ask", "Review document", "Classify product", "ABS check", "Fee estimate", "Prior art", "Corpus"];
 const LANGS = [
   ["auto", "Auto-detect"], ["en", "English"], ["hi", "हिन्दी"], ["mr", "मराठी"], ["ta", "தமிழ்"],
   ["te", "తెలుగు"], ["kn", "ಕನ್ನಡ"], ["ml", "മലയാളം"], ["bn", "বাংলা"], ["gu", "ગુજરાતી"],
@@ -253,6 +254,7 @@ export default function App() {
 
         {tab === "Classify product" && <Classify onDone={setCategory} />}
         {tab === "ABS check" && <AbsCheck />}
+        {tab === "Fee estimate" && <Fees />}
         {tab === "Prior art" && <PriorArt />}
         {tab === "Corpus" && <Sources />}
         {tab === "Escalations" && <Escalations />}

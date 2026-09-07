@@ -68,6 +68,11 @@ export default function AnswerPanel({ title, result, query, loading, error }) {
 
       {result && (
         <>
+          {result.refused && (
+            <div className="text-[11px] font-semibold text-saffron">
+              Guardrail: {result.intent === "medical" ? "medical advice request" : result.intent === "unsafe" ? "unsafe request" : "outside scope"} — not answered
+            </div>
+          )}
           <div className={`answer text-[15px] ${result.abstained ? "text-ink-soft italic" : "text-ink"}`}>
             {renderAnswer(result.answer, scrollTo)}
           </div>
