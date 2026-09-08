@@ -19,8 +19,8 @@ export default function Segmented({ options, value, onChange, labels = {} }) {
           role="radio"
           aria-checked={value === o}
           onClick={() => onChange(o)}
-          className={`relative z-10 px-4 py-1.5 text-sm font-semibold rounded-full transition-colors duration-300 ${
-            value === o ? "text-paper" : "text-leaf hover:text-leaf-soft"
+          className={`relative z-10 px-5 py-2 text-[13px] font-semibold rounded-full transition-colors duration-300 ${
+            value === o ? "text-white" : "text-tulsi hover:text-tulsi-soft"
           }`}
         >
           {labels[o] || o}

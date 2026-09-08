@@ -1,12 +1,14 @@
-// Saved chat threads, kept in the browser so nothing leaves the machine.
-const KEY = "ipsakti_chats";
+// Saved chat threads, kept in this browser and scoped to whoever is signed in.
+// Signed-out use has its own "guest" bucket, so signing out never exposes someone else's threads.
+const PREFIX = "ipsakti_chats";
+const bucket = (owner) => `${PREFIX}:${owner || "guest"}`;
 
-export function loadChats() {
-  try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; }
+export function loadChats(owner) {
+  try { return JSON.parse(localStorage.getItem(bucket(owner))) || []; } catch { return []; }
 }
 
-export function saveChats(chats) {
-  try { localStorage.setItem(KEY, JSON.stringify(chats.slice(0, 40))); } catch {}
+export function saveChats(owner, chats) {
+  try { localStorage.setItem(bucket(owner), JSON.stringify(chats.slice(0, 40))); } catch {}
 }
 
 export function titleFor(messages) {
@@ -17,8 +19,7 @@ export function titleFor(messages) {
 
 export function when(ts) {
   const d = new Date(ts), now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   const days = Math.round((now - d) / 86400000);
   if (days === 1) return "Yesterday";
   if (days < 7) return `${days} days ago`;

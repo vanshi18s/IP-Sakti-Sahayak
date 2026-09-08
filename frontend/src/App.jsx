@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, token } from "./api.js";
 import { loadChats, saveChats } from "./chats.js";
 import Sidebar from "./components/Sidebar.jsx";
+import LeafWatermarks from "./components/LeafWatermarks.jsx";
 import Thread from "./components/Thread.jsx";
 import Composer from "./components/Composer.jsx";
 import Classify from "./components/Classify.jsx";
@@ -23,7 +24,7 @@ export default function App() {
   const [lang, setLang] = useState("auto");
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState([]);
-  const [chats, setChats] = useState(() => loadChats());
+  const [chats, setChats] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [category, setCategory] = useState(null);
@@ -31,21 +32,30 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [showAuth, setShowAuth] = useState(false);
   const historyRef = useRef([]);
+  const owner = user?.email || null;
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => setHealth({ status: "down" }));
     if (token.get()) api.me().then(setUser).catch(() => token.clear());
   }, []);
 
+  // Threads belong to whoever is signed in; switching account switches the list.
+  useEffect(() => {
+    setChats(loadChats(owner));
+    setMessages([]);
+    historyRef.current = [];
+    setActiveId(null);
+  }, [owner]);
+
   useEffect(() => {
     if (!activeId || messages.length === 0) return;
     setChats((prev) => {
       const next = [{ id: activeId, ts: Date.now(), messages, history: historyRef.current },
                     ...prev.filter((c) => c.id !== activeId)];
-      saveChats(next);
+      saveChats(owner, next);
       return next;
     });
-  }, [messages, activeId]);
+  }, [messages, activeId, owner]);
 
   const tabs = user?.role === "facilitator" || user?.role === "admin" ? [...TABS, "Escalations"] : TABS;
 
@@ -56,9 +66,10 @@ export default function App() {
     setMessages(c.messages); historyRef.current = c.history || []; setActiveId(id); setTab("Ask");
   };
   const deleteChat = (id) => {
-    setChats((prev) => { const n = prev.filter((c) => c.id !== id); saveChats(n); return n; });
+    setChats((prev) => { const n = prev.filter((c) => c.id !== id); saveChats(owner, n); return n; });
     if (id === activeId) newChat();
   };
+  const signOut = () => { token.clear(); setUser(null); setShowAuth(false); setTab("Ask"); };
 
   const patch = (id, fields) => setMessages((m) => m.map((x) => (x.id === id ? { ...x, ...fields } : x)));
 
@@ -110,16 +121,18 @@ export default function App() {
     <div className="min-h-screen flex flex-col md:flex-row">
       <Sidebar
         chats={chats} activeId={activeId} onOpen={openChat} onNew={newChat} onDelete={deleteChat}
-        user={user} onSignIn={() => setShowAuth(true)} onSignOut={() => { token.clear(); setUser(null); }}
+        user={user} onSignIn={() => setShowAuth(true)} onSignOut={signOut}
         corpusCount={health?.chunks_in_corpus} backendUp={health?.status === "ok"}
       />
 
-      <div className="flex-1 min-w-0 flex flex-col md:h-screen">
-        <nav className="border-b border-patra-deep bg-paper/60 backdrop-blur">
+      <div className="relative flex-1 min-w-0 flex flex-col md:h-screen">
+        <LeafWatermarks />
+
+        <nav className="relative z-10 border-b border-patra-deep bg-paper/50 backdrop-blur">
           <div className="px-5 flex items-center gap-1 overflow-x-auto">
             {tabs.map((t) => (
               <button key={t} onClick={() => setTab(t)}
-                      className={`px-3 py-3 text-[13.5px] whitespace-nowrap border-b-2 -mb-px transition-colors ${
+                      className={`px-3 py-3.5 text-[13.5px] whitespace-nowrap border-b-2 -mb-px transition-colors ${
                         tab === t ? "border-tulsi text-tulsi font-semibold" : "border-transparent text-ink-soft hover:text-ink"
                       }`}>
                 {t}
@@ -129,14 +142,16 @@ export default function App() {
         </nav>
 
         {showAuth ? (
-          <main className="flex-1 flex items-center justify-center px-5 py-10">
+          <main className="relative z-10 flex-1 flex items-center justify-center px-5 py-10">
             <Auth onAuth={(u) => { setUser(u); setShowAuth(false); }} onSkip={() => setShowAuth(false)} />
           </main>
         ) : tab === "Ask" ? (
           <>
-            <div className="flex-1 overflow-y-auto scroll-quiet">
-              <div className="max-w-3xl mx-auto px-6">
-                <Thread messages={messages} onStarter={send} corpusCount={health?.chunks_in_corpus} />
+            <div className="relative z-10 flex-1 overflow-y-auto scroll-quiet">
+              <div className="max-w-3xl mx-auto px-6 min-h-full flex flex-col">
+                <div className="flex-1 flex flex-col">
+                  <Thread messages={messages} onStarter={send} />
+                </div>
                 {lastAnswer && !loading && (
                   <div className="flex justify-end pb-3">
                     <button
@@ -154,14 +169,16 @@ export default function App() {
                 )}
               </div>
             </div>
-            <Composer
-              value={draft} onChange={setDraft} onSend={() => send()} loading={loading}
-              jurisdiction={jurisdiction} setJurisdiction={setJurisdiction}
-              lang={lang} setLang={setLang} category={category}
-            />
+            <div className="relative z-10">
+              <Composer
+                value={draft} onChange={setDraft} onSend={() => send()} loading={loading}
+                jurisdiction={jurisdiction} setJurisdiction={setJurisdiction}
+                lang={lang} setLang={setLang} category={category}
+              />
+            </div>
           </>
         ) : (
-          <main className="flex-1 overflow-y-auto scroll-quiet">
+          <main className="relative z-10 flex-1 overflow-y-auto scroll-quiet">
             <div className="max-w-3xl mx-auto px-6 py-8">
               {tab === "Review document" && <Review user={user} />}
               {tab === "Classify product" && <Classify onDone={setCategory} />}
