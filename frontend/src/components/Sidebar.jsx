@@ -1,62 +1,68 @@
-// Left sidebar: brand, new chat, tools, recent threads, user.
-export default function Sidebar({ threads, activeId, onSelect, onNew, onDelete, tool, setTool, tools, user, onSignOut, onSignIn, health }) {
+import { titleFor, when } from "../chats.js";
+
+// Dark rail: brand, saved threads, then New chat and account at the foot.
+export default function Sidebar({ chats, activeId, onOpen, onNew, onDelete, user, onSignIn, onSignOut, corpusCount, backendUp }) {
   return (
-    <aside className="w-64 shrink-0 h-full flex flex-col bg-leaf text-paper">
-      <div className="px-4 pt-5 pb-4 border-b border-white/10">
-        <div className="flex items-center gap-2">
-          <span className="inline-block w-2.5 h-6 rounded-sm bg-saffron" />
-          <h1 className="text-lg text-paper leading-tight">IP-SAKTI Sahayak</h1>
-        </div>
-        <p className="text-[11px] text-paper/60 mt-1">Cited IP & regulatory guidance for Ayurveda</p>
-      </div>
-
-      <div className="px-3 pt-3">
-        <button onClick={onNew}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-md bg-saffron text-ink font-semibold text-sm hover:brightness-110">
-          <span className="text-lg leading-none">+</span> New chat
-        </button>
-      </div>
-
-      <nav className="px-3 pt-4">
-        <div className="text-[10px] uppercase tracking-wider text-paper/50 px-1 mb-1">Tools</div>
-        {tools.map((t) => (
-          <button key={t} onClick={() => setTool(t)}
-                  className={`w-full text-left px-3 py-1.5 rounded-md text-sm transition-colors ${
-                    tool === t ? "bg-white/15 text-paper font-semibold" : "text-paper/80 hover:bg-white/10"}`}>
-            {t}
-          </button>
-        ))}
-      </nav>
-
-      <div className="px-3 pt-4 flex-1 min-h-0 flex flex-col">
-        <div className="text-[10px] uppercase tracking-wider text-paper/50 px-1 mb-1">Recent chats</div>
-        <div className="flex-1 overflow-y-auto pr-1">
-          {threads.length === 0 && <p className="text-xs text-paper/50 px-1">No chats yet.</p>}
-          {threads.map((th) => (
-            <div key={th.id}
-                 className={`group flex items-center rounded-md ${th.id === activeId && tool === "Chat" ? "bg-white/15" : "hover:bg-white/10"}`}>
-              <button onClick={() => onSelect(th.id)} className="flex-1 text-left px-3 py-1.5 text-sm text-paper/90 truncate">
-                {th.title || "New chat"}
-              </button>
-              <button onClick={() => onDelete(th.id)} title="Delete"
-                      className="opacity-0 group-hover:opacity-70 hover:!opacity-100 px-2 text-paper/80 text-xs">✕</button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="px-4 py-3 border-t border-white/10 text-xs">
-        <div className="text-paper/60 mb-1">
-          {health?.status === "ok" ? `● Corpus · ${health.chunks_in_corpus} passages` : "○ Backend offline"}
-        </div>
-        {user ? (
-          <div className="flex items-center justify-between">
-            <span className="truncate"><span className="font-semibold">{user.name}</span> <span className="text-paper/60">· {user.role}</span></span>
-            <button onClick={onSignOut} className="underline underline-offset-2 text-paper/80">Sign out</button>
+    <aside className="w-full md:w-64 shrink-0 bg-bark text-mist flex md:flex-col md:h-screen md:sticky md:top-0">
+      <div className="px-4 py-4 flex items-center gap-2.5 border-b border-white/10">
+        <img src="/leaf.svg" alt="" className="w-6 h-6 brightness-0 invert opacity-90" />
+        <div className="min-w-0">
+          <div className="font-semibold text-[15px] text-white leading-none">IP-SAKTI Sahayak</div>
+          <div className="text-[10.5px] text-mist/60 mt-1 truncate">
+            {backendUp ? `${corpusCount?.toLocaleString("en-IN")} passages indexed` : "Backend offline"}
           </div>
+        </div>
+      </div>
+
+      <div className="hidden md:block flex-1 overflow-y-auto scroll-quiet px-2 py-3">
+        <div className="text-[10.5px] uppercase tracking-wide text-mist/45 px-2 mb-2">Threads</div>
+        {chats.length === 0 ? (
+          <p className="text-[11.5px] text-mist/50 px-2 leading-relaxed">
+            Your conversations stay on this device. Nothing is uploaded.
+          </p>
         ) : (
-          <button onClick={onSignIn} className="underline underline-offset-2 text-paper/80">Sign in</button>
+          <ol className="flex flex-col gap-0.5">
+            {chats.map((c) => (
+              <li key={c.id} className="group relative">
+                <button
+                  onClick={() => onOpen(c.id)}
+                  className={`w-full text-left rounded-lg px-2.5 py-2 pr-7 transition-colors ${
+                    c.id === activeId ? "bg-white/12 text-white" : "hover:bg-white/6 text-mist/85"
+                  }`}
+                >
+                  <div className="text-[13px] leading-snug line-clamp-2">{titleFor(c.messages)}</div>
+                  <div className="text-[10px] text-mist/45 mt-0.5">{when(c.ts)}</div>
+                </button>
+                <button
+                  onClick={() => onDelete(c.id)}
+                  aria-label="Delete thread"
+                  className="absolute right-1.5 top-2 opacity-0 group-hover:opacity-100 text-mist/60 hover:text-copper px-1"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ol>
         )}
+      </div>
+
+      <div className="ml-auto md:ml-0 flex md:flex-col items-center md:items-stretch gap-2 px-3 py-3 md:border-t border-white/10">
+        <button
+          onClick={onNew}
+          className="flex items-center justify-center gap-1.5 text-sm font-semibold text-bark bg-mist rounded-lg px-3 py-2 hover:bg-white"
+        >
+          <span className="text-base leading-none">+</span> New chat
+        </button>
+        <div className="text-[11px] text-mist/60 md:pt-1 whitespace-nowrap">
+          {user ? (
+            <>
+              <span className="text-mist">{user.name}</span>
+              <button onClick={onSignOut} className="ml-2 underline underline-offset-2 hover:text-white">Sign out</button>
+            </>
+          ) : (
+            <button onClick={onSignIn} className="underline underline-offset-2 hover:text-white">Sign in</button>
+          )}
+        </div>
       </div>
     </aside>
   );

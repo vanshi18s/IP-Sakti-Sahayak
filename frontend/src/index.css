@@ -1,36 +1,37 @@
 @import "tailwindcss";
 
 @theme {
-  /* Ground: palm-leaf manuscript, not the usual cream */
-  --color-patra: #f4f3e7;
-  --color-patra-deep: #e6e6d4;
-  --color-paper: #fffdf6;
+  /* Working surfaces */
+  --color-patra: #f6f5ec;        /* manuscript ground */
+  --color-patra-deep: #e2e2d2;   /* hairlines */
+  --color-paper: #ffffff;
 
-  /* Tulsi greens — primary */
-  --color-tulsi: #173d2e;
+  /* Tulsi — sidebar and primary actions */
+  --color-bark: #10241a;         /* sidebar ground */
+  --color-bark-soft: #1c3527;    /* sidebar hover */
+  --color-tulsi: #1b4332;
   --color-tulsi-soft: #2f5f47;
   --color-sprout: #7fa383;
+  --color-mist: #d6e0d5;         /* text on bark */
 
-  /* Haldi — reserved for citations and confidence only */
+  /* Haldi — citations, confidence, active leaf */
   --color-haldi: #c8860d;
-  --color-haldi-wash: #f7ebd2;
+  --color-haldi-wash: #fbf0da;
 
-  /* Copper — refusals, warnings */
   --color-copper: #a8552c;
-
-  --color-ink: #14231a;
-  --color-ink-soft: #56635a;
+  --color-ink: #13201a;
+  --color-ink-soft: #5a675e;
 
   --font-serif: "Tiro Devanagari Hindi", Georgia, serif;
-  --font-ui: "Karla", system-ui, sans-serif;
+  --font-ui: "Bricolage Grotesque", system-ui, sans-serif;
 
-  /* Aliases so the older screens (Classify, ABS, Fees, Prior art, Corpus, Auth) match this palette */
-  --color-leaf: #173d2e;
+  /* Aliases for the older screens */
+  --color-leaf: #1b4332;
   --color-leaf-soft: #2f5f47;
-  --color-sage: #f4f3e7;
-  --color-sage-deep: #e6e6d4;
+  --color-sage: #f6f5ec;
+  --color-sage-deep: #e2e2d2;
   --color-saffron: #c8860d;
-  --color-saffron-soft: #f7ebd2;
+  --color-saffron-soft: #fbf0da;
   --color-danger: #a8552c;
 }
 
@@ -40,21 +41,21 @@ body {
   background: var(--color-patra);
   color: var(--color-ink);
   font-family: var(--font-ui);
+  font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, .serif { font-family: var(--font-serif); letter-spacing: 0; }
+h1, h2, h3 { font-family: var(--font-ui); font-weight: 600; letter-spacing: -0.015em; }
 
 /* Answer body: serif, generous leading, capped measure */
 .answer {
   font-family: var(--font-serif);
-  font-size: 1.02rem;
-  line-height: 1.72;
-  max-width: 68ch;
+  font-size: 1.05rem;
+  line-height: 1.75;
+  max-width: 66ch;
 }
 .answer p { margin-bottom: 0.7rem; }
 
-/* Citation chip — the only haldi in running text */
 .cite {
   display: inline-block;
   font-family: var(--font-ui);
@@ -62,7 +63,7 @@ h1, h2, h3, .serif { font-family: var(--font-serif); letter-spacing: 0; }
   font-weight: 700;
   color: #8a5c07;
   background: var(--color-haldi-wash);
-  border: 1px solid #e8d3a4;
+  border: 1px solid #ecd7a8;
   border-radius: 3px;
   padding: 0 0.3rem;
   margin: 0 0.12rem;
@@ -71,30 +72,33 @@ h1, h2, h3, .serif { font-family: var(--font-serif); letter-spacing: 0; }
 }
 .cite:hover, .cite:focus-visible { background: var(--color-haldi); color: #fff; border-color: var(--color-haldi); }
 
-/* The stem: every answer hangs off one vertical line; each source is a leaf on it */
-.stem { position: relative; padding-left: 1.35rem; }
+/* Every answer hangs off one stem; each cited source is a leaf on it */
+.stem { position: relative; padding-left: 1.4rem; }
 .stem::before {
   content: "";
-  position: absolute; left: 0.34rem; top: 0.45rem; bottom: 0.3rem;
-  width: 1.5px;
-  background: linear-gradient(to bottom, var(--color-sprout), transparent);
+  position: absolute; left: 0.36rem; top: 0.5rem; bottom: 0.35rem;
+  width: 2px; border-radius: 2px;
+  background: linear-gradient(to bottom, var(--color-sprout), rgba(127,163,131,0.15));
 }
 .leaf-node { position: relative; }
 .leaf-node::before {
   content: "";
-  position: absolute; left: -1.02rem; top: 0.72rem;
-  width: 9px; height: 9px;
+  position: absolute; left: -1.07rem; top: 0.85rem;
+  width: 10px; height: 10px;
   background: var(--color-sprout);
-  border-radius: 0 60% 0 60%;
+  border-radius: 0 62% 0 62%;
   transform: rotate(-20deg);
 }
 .leaf-node[data-active="true"]::before { background: var(--color-haldi); }
 
 *:focus-visible { outline: 2px solid var(--color-haldi); outline-offset: 2px; }
 
-/* Only motion in the app: a new answer settling in */
 @keyframes settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .settle { animation: settle 320ms ease-out; }
+
+.scroll-quiet::-webkit-scrollbar { width: 8px; }
+.scroll-quiet::-webkit-scrollbar-thumb { background: rgba(0,0,0,.14); border-radius: 8px; }
+.scroll-quiet::-webkit-scrollbar-track { background: transparent; }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }

@@ -14,19 +14,19 @@ export default function Thread({ messages, onStarter, corpusCount }) {
 
   if (messages.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center text-center py-16 gap-6">
+      <div className="flex flex-col items-center justify-center text-center py-20 gap-7">
         <Sprig />
         <div>
-          <h2 className="text-2xl text-tulsi">What does the law say about your product?</h2>
-          <p className="text-sm text-ink-soft mt-2 max-w-md">
+          <h2 className="text-[26px] text-tulsi leading-tight">What does the law say about your product?</h2>
+          <p className="text-[13.5px] text-ink-soft mt-2.5 max-w-md mx-auto leading-relaxed">
             Ask in Hindi, English or any Indian language. Every answer names the Act and section it came from
-            {corpusCount ? `, drawn from ${corpusCount.toLocaleString("en-IN")} passages of the actual statutes` : ""}.
+            {corpusCount ? `, drawn from ${corpusCount.toLocaleString("en-IN")} passages of the statutes themselves` : ""}.
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2 max-w-2xl">
           {STARTERS.map((s) => (
             <button key={s} onClick={() => onStarter(s)}
-                    className="text-xs px-3 py-1.5 rounded-full border border-patra-deep bg-paper text-ink-soft hover:border-tulsi hover:text-tulsi">
+                    className="text-[12.5px] px-3.5 py-2 rounded-full border border-patra-deep bg-paper text-ink-soft hover:border-tulsi hover:text-tulsi transition-colors">
               {s}
             </button>
           ))}
@@ -36,11 +36,11 @@ export default function Thread({ messages, onStarter, corpusCount }) {
   }
 
   return (
-    <div className="flex flex-col gap-7 py-6">
+    <div className="flex flex-col gap-8 py-7">
       {messages.map((m) =>
         m.role === "user" ? (
           <div key={m.id} className="flex justify-end">
-            <div className="max-w-[80%] bg-tulsi text-patra rounded-2xl rounded-br-sm px-4 py-2.5">
+            <div className="max-w-[78%] bg-tulsi text-white rounded-2xl rounded-br-md px-4 py-2.5">
               <p className="text-[15px] leading-relaxed">{m.text}</p>
             </div>
           </div>
@@ -51,8 +51,8 @@ export default function Thread({ messages, onStarter, corpusCount }) {
             </div>
             {m.differences !== undefined && (
               <div className="border-l-2 border-haldi pl-4">
-                <h3 className="text-base text-tulsi">Where the two regimes differ</h3>
-                <p className="answer text-sm mt-1 whitespace-pre-wrap">
+                <h3 className="text-[15px] text-tulsi">Where the two regimes differ</h3>
+                <p className="answer text-[15px] mt-1 whitespace-pre-wrap">
                   {m.differences || "Comparing the two answers…"}
                 </p>
               </div>
