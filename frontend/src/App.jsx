@@ -1,112 +1,111 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, token } from "./api.js";
-import AnswerPanel from "./components/AnswerPanel.jsx";
+import Thread from "./components/Thread.jsx";
+import Composer from "./components/Composer.jsx";
 import Classify from "./components/Classify.jsx";
 import PriorArt from "./components/PriorArt.jsx";
 import AbsCheck from "./components/AbsCheck.jsx";
 import Sources from "./components/Sources.jsx";
-import Segmented from "./components/Segmented.jsx";
-import VoiceButton from "./components/VoiceButton.jsx";
 import Auth from "./components/Auth.jsx";
 import Escalations from "./components/Escalations.jsx";
 import Review from "./components/Review.jsx";
 import Fees from "./components/Fees.jsx";
 import { exportQA } from "./report.js";
 
-const JURISDICTIONS = ["India", "International", "Both"];
 const TABS = ["Ask", "Review document", "Classify product", "ABS check", "Fee estimate", "Prior art", "Corpus"];
-const LANGS = [
-  ["auto", "Auto-detect"], ["en", "English"], ["hi", "हिन्दी"], ["mr", "मराठी"], ["ta", "தமிழ்"],
-  ["te", "తెలుగు"], ["kn", "ಕನ್ನಡ"], ["ml", "മലയാളം"], ["bn", "বাংলা"], ["gu", "ગુજરાતી"],
-];
-
-const EXAMPLES = [
-  "Can a classical Ayurvedic formulation be patented in India?",
-  "Do I need NBA approval to use an Indian medicinal plant commercially?",
-  "Can I advertise my Ayurvedic product as a cure for diabetes?",
-  "How do I file one patent application covering many countries?",
-];
+let seq = 0;
+const nextId = () => `m${++seq}`;
 
 export default function App() {
-  const [tab, setTab] = useState(TABS[0]);
+  const [tab, setTab] = useState("Ask");
   const [jurisdiction, setJurisdiction] = useState("India");
   const [lang, setLang] = useState("auto");
-  const [query, setQuery] = useState("");
-  const [asked, setAsked] = useState("");
-  const [category, setCategory] = useState(null);
-  const [results, setResults] = useState({});   // { India: {...}, International: {...} }
-  const [history, setHistory] = useState([]);   // [{query, jurisdiction, results}]
-  const [differences, setDifferences] = useState("");
+  const [draft, setDraft] = useState("");
+  const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
+  const [category, setCategory] = useState(null);
   const [health, setHealth] = useState(null);
-  const [user, setUser] = useState(null);           // logged-in user or null
-  const [authState, setAuthState] = useState("checking"); // checking | login | ready
+  const [user, setUser] = useState(null);
+  const [authState, setAuthState] = useState("checking");
+  const historyRef = useRef([]);          // [{role, content}] sent to the backend
 
   useEffect(() => {
     api.health().then(setHealth).catch(() => setHealth({ status: "down" }));
     if (token.get()) {
       api.me().then((u) => { setUser(u); setAuthState("ready"); })
               .catch(() => { token.clear(); setAuthState("login"); });
-    } else {
-      setAuthState("login");
-    }
+    } else setAuthState("login");
   }, []);
 
   const signOut = () => { token.clear(); setUser(null); setAuthState("login"); };
   const tabs = user?.role === "facilitator" || user?.role === "admin" ? [...TABS, "Escalations"] : TABS;
 
-  const ask = async (q = query) => {
-    if (!q.trim()) return;
-    // push the previous answer into history before asking a new one
-    if (asked && Object.keys(results).length) {
-      setHistory((h) => [{ query: asked, jurisdiction, results }, ...h]);
-    }
-    setAsked(q);
+  const newChat = () => {
+    setMessages([]);
+    historyRef.current = [];
+    setDraft("");
+  };
+
+  const send = async (text = draft) => {
+    const q = text.trim();
+    if (!q || loading) return;
+    setDraft("");
     setLoading(true);
-    setError(false);
-    setResults({});
-    setDifferences("");
+
+    const userMsg = { id: nextId(), role: "user", text: q };
     const targets = jurisdiction === "Both" ? ["India", "International"] : [jurisdiction];
+    const placeholder = targets.length === 2
+      ? { id: nextId(), role: "assistant", panels: targets.map((j) => ({ id: nextId(), loading: true, jurisdiction: j })) }
+      : { id: nextId(), role: "assistant", loading: true, question: q };
+    setMessages((m) => [...m, userMsg, placeholder]);
+
+    const hist = historyRef.current.slice(-6);
     try {
-      const out = await Promise.all(targets.map((j) => api.chat(q, j, category?.name, lang)));
-      const next = {};
-      targets.forEach((j, i) => (next[j] = out[i]));
-      setResults(next);
+      const out = await Promise.all(targets.map((j) => api.chat(q, j, category?.name, lang, hist)));
+      const filled = targets.length === 2
+        ? {
+            ...placeholder,
+            panels: targets.map((j, i) => ({ id: nextId(), jurisdiction: j, question: q, result: out[i] })),
+            differences: "",
+          }
+        : { ...placeholder, loading: false, jurisdiction: targets[0], question: q, result: out[0] };
+      setMessages((m) => m.map((x) => (x.id === placeholder.id ? filled : x)));
+
+      historyRef.current = [...hist,
+        { role: "user", content: q },
+        { role: "assistant", content: (out[0].answer_en || out[0].answer || "").slice(0, 600) }];
+
       if (targets.length === 2) {
-        api.compare(q, next.India.answer_en || next.India.answer, next.International.answer_en || next.International.answer)
-           .then((r) => setDifferences(r.differences)).catch(() => {});
+        api.compare(q, out[0].answer_en || out[0].answer, out[1].answer_en || out[1].answer)
+           .then((r) => setMessages((m) => m.map((x) => (x.id === placeholder.id ? { ...x, differences: r.differences } : x))))
+           .catch(() => {});
       }
     } catch {
-      setError(true);
+      setMessages((m) => m.map((x) => (x.id === placeholder.id ? { ...x, loading: false, error: true } : x)));
     } finally {
       setLoading(false);
     }
   };
 
-  const panels = jurisdiction === "Both" ? ["India", "International"] : [jurisdiction];
+  const lastAnswer = [...messages].reverse().find((m) => m.role === "assistant" && (m.result || m.panels));
 
   return (
     <div className="min-h-full flex flex-col">
-      {/* Header */}
-      <header className="border-b border-sage-deep bg-paper/60">
-        <div className="max-w-6xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl text-leaf leading-tight">IP-SAKTI Sahayak</h1>
-            <p className="text-xs text-ink-soft">
-              Source-cited guidance on intellectual property and regulation for Ayurveda
+      <header className="border-b border-patra-deep bg-paper/70">
+        <div className="max-w-4xl mx-auto px-5 py-3 flex items-center gap-3">
+          <img src="/leaf.svg" alt="" className="w-6 h-6" />
+          <div className="flex-1">
+            <h1 className="text-xl text-tulsi leading-none">IP-SAKTI Sahayak</h1>
+            <p className="text-[11px] text-ink-soft mt-0.5">
+              Intellectual property and regulation for Ayurveda, answered from the statutes
             </p>
           </div>
-          <div className="text-xs text-ink-soft text-right">
-            {health?.status === "ok"
-              ? `Corpus loaded · ${health.chunks_in_corpus} passages`
-              : "Backend offline"}
-            {category && <div className="text-saffron font-semibold mt-0.5">Product: {category.name}</div>}
-            <div className="mt-1">
+          <div className="text-[11px] text-ink-soft text-right">
+            <div>{health?.status === "ok" ? `${health.chunks_in_corpus.toLocaleString("en-IN")} passages indexed` : "Backend offline"}</div>
+            <div className="mt-0.5">
               {user ? (
                 <>
                   <span className="text-ink font-semibold">{user.name}</span>
-                  <span> · {user.role}</span>
                   <button onClick={signOut} className="ml-2 underline underline-offset-2">Sign out</button>
                 </>
               ) : authState === "ready" ? (
@@ -128,167 +127,70 @@ export default function App() {
       )}
 
       {authState === "ready" && (
-      <main className="max-w-6xl w-full mx-auto px-5 py-6 flex-1 flex flex-col gap-6">
-        {/* Tabs */}
-        <nav className="flex gap-1 border-b border-sage-deep">
-          {tabs.map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-2 text-sm font-semibold -mb-px border-b-2 ${
-                tab === t ? "border-leaf text-leaf" : "border-transparent text-ink-soft hover:text-ink"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </nav>
-
-        {tab === "Ask" && (
-          <>
-            {/* Jurisdiction toggle */}
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm text-ink-soft">Which law applies?</span>
-              <Segmented options={JURISDICTIONS} value={jurisdiction} onChange={setJurisdiction} />
-              {jurisdiction === "Both" && (
-                <span className="text-xs text-ink-soft">Indian and international answers are shown separately.</span>
+        <>
+          <nav className="border-b border-patra-deep bg-paper/40">
+            <div className="max-w-4xl mx-auto px-5 flex items-center gap-1 overflow-x-auto">
+              {tabs.map((t) => (
+                <button key={t} onClick={() => setTab(t)}
+                        className={`px-3 py-2.5 text-sm whitespace-nowrap border-b-2 -mb-px ${
+                          tab === t ? "border-tulsi text-tulsi font-semibold" : "border-transparent text-ink-soft hover:text-ink"
+                        }`}>
+                  {t}
+                </button>
+              ))}
+              {tab === "Ask" && messages.length > 0 && (
+                <button onClick={newChat}
+                        className="ml-auto text-xs text-ink-soft hover:text-tulsi underline underline-offset-2 whitespace-nowrap">
+                  New chat
+                </button>
               )}
-              <label className="ml-auto flex items-center gap-2 text-sm text-ink-soft">
-                Language
-                <select
-                  value={lang}
-                  onChange={(e) => setLang(e.target.value)}
-                  className="bg-paper border border-sage-deep rounded-md px-2 py-1 text-sm text-ink"
-                >
-                  {LANGS.map(([code, name]) => (
-                    <option key={code} value={code}>{name}</option>
-                  ))}
-                </select>
-              </label>
             </div>
+          </nav>
 
-            {/* Query box */}
-            <div className="flex flex-col gap-2">
-              <textarea
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    ask();
-                  }
-                }}
-                rows={3}
-                placeholder="Ask about patents, trademarks, GI, licensing, ABS, advertising or export rules…"
-                className="w-full bg-paper border border-sage-deep rounded-md p-3 text-[15px] focus:border-leaf"
-              />
-              <div className="flex items-center justify-between">
-                <div className="flex flex-wrap gap-2">
-                  {EXAMPLES.map((ex) => (
+          {tab === "Ask" ? (
+            <>
+              <main className="flex-1 max-w-4xl w-full mx-auto px-5">
+                <Thread messages={messages} onStarter={send} corpusCount={health?.chunks_in_corpus} />
+                {lastAnswer && !loading && (
+                  <div className="flex justify-end pb-2">
                     <button
-                      key={ex}
-                      onClick={() => {
-                        setQuery(ex);
-                        ask(ex);
-                      }}
-                      className="text-xs px-2.5 py-1 rounded-full border border-sage-deep bg-paper text-ink-soft hover:border-leaf hover:text-leaf"
-                    >
-                      {ex}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <VoiceButton lang={lang} onResult={(t) => { setQuery(t); ask(t); }} />
-                  <button
-                    onClick={() => ask()}
-                    disabled={loading || !query.trim()}
-                    className="shrink-0 text-sm font-semibold px-5 py-2 rounded-md bg-leaf text-paper disabled:opacity-40"
-                  >
-                    {loading ? "Searching…" : "Get answer"}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Answers */}
-            {(asked || loading) && (
-              <>
-                <div className={`grid gap-4 ${panels.length === 2 ? "md:grid-cols-2" : "grid-cols-1"}`}>
-                  {panels.map((j) => (
-                    <AnswerPanel
-                      key={j}
-                      title={j === "India" ? "Under Indian law" : "Under international regimes"}
-                      result={results[j]}
-                      query={asked}
-                      loading={loading}
-                      error={error}
-                    />
-                  ))}
-                </div>
-
-                {panels.length === 2 && Object.keys(results).length === 2 && (
-                  <section className="border-l-4 border-saffron bg-paper rounded-r-md p-4">
-                    <h3 className="text-lg text-leaf">Key differences</h3>
-                    <p className="text-sm whitespace-pre-wrap mt-1">
-                      {differences || "Comparing the two answers…"}
-                    </p>
-                  </section>
-                )}
-
-                {Object.keys(results).length > 0 && !loading && (
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => exportQA({ question: asked, results, user, differences })}
-                      className="text-xs font-semibold px-3 py-1.5 rounded-md border border-leaf text-leaf hover:bg-leaf hover:text-paper"
-                    >
-                      Download report (PDF)
+                      onClick={() => exportQA({
+                        question: lastAnswer.question || lastAnswer.panels?.[0]?.question,
+                        results: lastAnswer.panels
+                          ? Object.fromEntries(lastAnswer.panels.map((p) => [p.jurisdiction, p.result]))
+                          : { [lastAnswer.jurisdiction]: lastAnswer.result },
+                        user, differences: lastAnswer.differences,
+                      })}
+                      className="text-xs text-ink-soft underline underline-offset-2 hover:text-tulsi">
+                      Save this answer as PDF
                     </button>
                   </div>
                 )}
-              </>
-            )}
-          </>
-        )}
-
-        {tab === "Review document" && <Review user={user} />}
-
-        {tab === "Classify product" && <Classify onDone={setCategory} />}
-        {tab === "ABS check" && <AbsCheck />}
-        {tab === "Fee estimate" && <Fees />}
-        {tab === "Prior art" && <PriorArt />}
-        {tab === "Corpus" && <Sources />}
-        {tab === "Escalations" && <Escalations />}
-
-        {/* Earlier questions in this session */}
-        {tab === "Ask" && history.length > 0 && (
-          <div className="flex flex-col gap-3 mt-4">
-            <h2 className="text-lg text-ink-soft">Earlier in this session</h2>
-            {history.map((h, i) => (
-              <details key={i} className="bg-paper/50 border border-sage-deep rounded-lg p-3">
-                <summary className="cursor-pointer text-sm font-semibold">
-                  {h.query} <span className="text-ink-soft font-normal">· {h.jurisdiction}</span>
-                </summary>
-                <div className={`grid gap-4 mt-3 ${Object.keys(h.results).length === 2 ? "md:grid-cols-2" : ""}`}>
-                  {Object.entries(h.results).map(([j, r]) => (
-                    <AnswerPanel
-                      key={j}
-                      title={j === "India" ? "Under Indian law" : "Under international regimes"}
-                      result={r}
-                      query={h.query}
-                    />
-                  ))}
-                </div>
-              </details>
-            ))}
-          </div>
-        )}
-      </main>
+              </main>
+              <Composer
+                value={draft} onChange={setDraft} onSend={() => send()} loading={loading}
+                jurisdiction={jurisdiction} setJurisdiction={setJurisdiction}
+                lang={lang} setLang={setLang} category={category}
+              />
+            </>
+          ) : (
+            <main className="flex-1 max-w-4xl w-full mx-auto px-5 py-7">
+              {tab === "Review document" && <Review user={user} />}
+              {tab === "Classify product" && <Classify onDone={setCategory} />}
+              {tab === "ABS check" && <AbsCheck />}
+              {tab === "Fee estimate" && <Fees />}
+              {tab === "Prior art" && <PriorArt />}
+              {tab === "Corpus" && <Sources />}
+              {tab === "Escalations" && <Escalations />}
+            </main>
+          )}
+        </>
       )}
 
-      <footer className="border-t border-sage-deep">
-        <div className="max-w-6xl mx-auto px-5 py-3 text-[11px] text-ink-soft flex justify-between">
-          <span>Ministry of Ayush · All India Institute of Ayurveda · SIH 2026 · SIH26045</span>
-          <span>Information, not legal advice.</span>
+      <footer className="border-t border-patra-deep">
+        <div className="max-w-4xl mx-auto px-5 py-2.5 text-[11px] text-ink-soft flex justify-between">
+          <span>Ministry of Ayush · All India Institute of Ayurveda</span>
+          <span>SIH 2026 · SIH26045</span>
         </div>
       </footer>
     </div>

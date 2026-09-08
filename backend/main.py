@@ -27,7 +27,7 @@ from guardrails import check as guardrail_check
 from review import review_document
 from abs_check import QUESTIONS as ABS_QUESTIONS, abs_check
 from prior_art import search_prior_art
-from rag import answer_question, _collection
+from rag import answer_question, contextualize, _collection
 from translate import to_english, from_english
 
 app = FastAPI(title="IP-SAKTI Sahayak API", version="0.1.0")
@@ -56,11 +56,17 @@ def _audit(event: str, payload: dict):
 
 # ---------- schemas ----------
 
+class Turn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class ChatRequest(BaseModel):
     query: str
     jurisdiction: Optional[Literal["India", "International"]] = None
     lang: str = "auto"         # "auto" detects script; or "en", "hi", "ta", ...
     category: Optional[str] = None
+    history: list[Turn] = []   # previous turns in this thread, oldest first
 
 
 class ClassifyRequest(BaseModel):
@@ -122,10 +128,13 @@ def chat(request: Request, req: ChatRequest, user: Optional[UserOut] = Depends(c
                 "confidence": 0.0, "sources": [], "jurisdiction": req.jurisdiction, "language": detected,
                 "disclaimer": config.DISCLAIMER}
 
-    # 3. answer in English
-    q = f"[Product category: {req.category}] {q_en}" if req.category else q_en
+    # 3. answer in English (follow-ups resolved against the thread)
+    standalone = contextualize([t.model_dump() for t in req.history], q_en) if req.history else q_en
+    q = f"[Product category: {req.category}] {standalone}" if req.category else standalone
     result = answer_question(q, req.jurisdiction)
     result["intent"] = gate["intent"]
+    if standalone != q_en:
+        result["resolved_question"] = standalone
 
     # 4. translate out
     if detected != "en":

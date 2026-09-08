@@ -172,6 +172,23 @@ def rewrite_query(query: str) -> str:
     return _chat(REWRITE_SYS, query, max_tokens=400) or query
 
 
+CONTEXT_SYS = (
+    "You rewrite a follow-up question so it can be understood on its own, using the conversation above. "
+    "Replace pronouns and references ('it', 'that', 'the same product', 'what about trademarks') with the "
+    "actual subject from earlier turns. Keep the user's intent and wording as close as possible. "
+    "If the question already stands alone, repeat it unchanged. Output only the question."
+)
+
+
+def contextualize(history: list[dict], question: str) -> str:
+    """Turn a follow-up into a standalone question using the last few turns."""
+    if not history:
+        return question
+    turns = "\n".join(f"{h['role']}: {h['content'][:400]}" for h in history[-6:])
+    out = _chat(CONTEXT_SYS, f"Conversation:\n{turns}\n\nFollow-up question: {question}", max_tokens=400)
+    return (out or question).strip().strip('"')
+
+
 # ---------- step 3: generate ----------
 
 ANSWER_SYS = """You are IP-SAKTI Sahayak, an assistant for Intellectual Property and regulatory

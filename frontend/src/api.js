@@ -31,7 +31,8 @@ const get = (path) => fetch(`${BASE}${path}`, { headers: headers() }).then((r) =
 
 export const api = {
   health: () => get("/health"),
-  chat: (query, jurisdiction, category, lang = "auto") => post("/chat", { query, jurisdiction, category, lang }),
+  chat: (query, jurisdiction, category, lang = "auto", history = []) =>
+    post("/chat", { query, jurisdiction, category, lang, history }),
   classifyQuestions: () => get("/classify/questions"),
   classify: (answers) => post("/classify", { answers }),
   absQuestions: () => get("/abs/questions"),

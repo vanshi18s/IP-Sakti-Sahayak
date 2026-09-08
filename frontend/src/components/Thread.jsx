@@ -1,0 +1,82 @@
+import { useEffect, useRef } from "react";
+import AnswerMessage from "./AnswerMessage.jsx";
+
+const STARTERS = [
+  "Can a classical Ayurvedic formulation be patented in India?",
+  "Do I need NBA approval to use an Indian medicinal plant commercially?",
+  "Can I advertise my Ayurvedic product as a cure for diabetes?",
+  "How do I file one patent application covering many countries?",
+];
+
+export default function Thread({ messages, onStarter, corpusCount }) {
+  const end = useRef(null);
+  useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages]);
+
+  if (messages.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center text-center py-16 gap-6">
+        <Sprig />
+        <div>
+          <h2 className="text-2xl text-tulsi">What does the law say about your product?</h2>
+          <p className="text-sm text-ink-soft mt-2 max-w-md">
+            Ask in Hindi, English or any Indian language. Every answer names the Act and section it came from
+            {corpusCount ? `, drawn from ${corpusCount.toLocaleString("en-IN")} passages of the actual statutes` : ""}.
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-center gap-2 max-w-2xl">
+          {STARTERS.map((s) => (
+            <button key={s} onClick={() => onStarter(s)}
+                    className="text-xs px-3 py-1.5 rounded-full border border-patra-deep bg-paper text-ink-soft hover:border-tulsi hover:text-tulsi">
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-7 py-6">
+      {messages.map((m) =>
+        m.role === "user" ? (
+          <div key={m.id} className="flex justify-end">
+            <div className="max-w-[80%] bg-tulsi text-patra rounded-2xl rounded-br-sm px-4 py-2.5">
+              <p className="text-[15px] leading-relaxed">{m.text}</p>
+            </div>
+          </div>
+        ) : m.panels ? (
+          <div key={m.id} className="flex flex-col gap-6">
+            <div className="grid md:grid-cols-2 gap-6">
+              {m.panels.map((p) => <AnswerMessage key={p.id} msg={p} />)}
+            </div>
+            {m.differences !== undefined && (
+              <div className="border-l-2 border-haldi pl-4">
+                <h3 className="text-base text-tulsi">Where the two regimes differ</h3>
+                <p className="answer text-sm mt-1 whitespace-pre-wrap">
+                  {m.differences || "Comparing the two answers…"}
+                </p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <AnswerMessage key={m.id} msg={m} />
+        )
+      )}
+      <div ref={end} />
+    </div>
+  );
+}
+
+// Empty-state mark: a single tulsi sprig, drawn once.
+function Sprig() {
+  return (
+    <svg width="96" height="96" viewBox="0 0 96 96" fill="none" aria-hidden="true">
+      <path d="M48 88V30" stroke="#7fa383" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M48 60c-13 0-22-8-24-20 13-2 22 6 24 20zM48 60c13 0 22-8 24-20-13-2-22 6-24 20z"
+            fill="#e6ede6" stroke="#7fa383" strokeWidth="1.2" />
+      <path d="M48 40c-9 0-16-6-17-15 9-1 16 4 17 15zM48 40c9 0 16-6 17-15-9-1-16 4-17 15z"
+            fill="#eef2ea" stroke="#7fa383" strokeWidth="1.2" />
+      <circle cx="48" cy="22" r="4" fill="#c8860d" opacity=".5" />
+    </svg>
+  );
+}
