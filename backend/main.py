@@ -11,6 +11,7 @@ from typing import Literal, Optional
 
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -27,7 +28,7 @@ from guardrails import check as guardrail_check
 from review import review_document
 from abs_check import QUESTIONS as ABS_QUESTIONS, abs_check
 from prior_art import search_prior_art
-from rag import answer_question, contextualize, _collection
+from rag import answer_question, answer_stream, contextualize, _collection
 from translate import to_english, from_english
 
 app = FastAPI(title="IP-SAKTI Sahayak API", version="0.1.0")
@@ -52,6 +53,10 @@ def _audit(event: str, payload: dict):
     """Minimal audit trail (DPDP-aligned: no PII stored beyond the query itself)."""
     with LOG_FILE.open("a", encoding="utf-8") as f:
         f.write(json.dumps({"ts": datetime.utcnow().isoformat(), "event": event, **payload}) + "\n")
+
+
+def _sse(event: str, payload: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
 
 
 # ---------- schemas ----------
@@ -148,6 +153,53 @@ def chat(request: Request, req: ChatRequest, user: Optional[UserOut] = Depends(c
                     "jurisdiction": req.jurisdiction,
                     "confidence": result["confidence"], "abstained": result["abstained"]})
     return result
+
+
+@app.post("/chat/stream")
+@limiter.limit("20/minute")
+def chat_stream(request: Request, req: ChatRequest, user: Optional[UserOut] = Depends(current_user)):
+    """Server-sent events: stage updates, then the answer as it is written, then the verified result."""
+    def gen():
+        src = None if req.lang in ("auto", "", None) else req.lang
+        q_en, detected = to_english(req.query, src)
+
+        gate = guardrail_check(q_en)
+        if not gate["allowed"]:
+            msg = from_english(gate["message"], detected) if detected != "en" else gate["message"]
+            _audit("chat_refused", {"user_id": user.id if user else None, "query": req.query, "intent": gate["intent"]})
+            yield _sse("done", {"answer": msg, "abstained": True, "refused": True, "intent": gate["intent"],
+                                "confidence": 0.0, "sources": [], "jurisdiction": req.jurisdiction,
+                                "language": detected, "disclaimer": config.DISCLAIMER})
+            return
+
+        standalone = contextualize([t.model_dump() for t in req.history], q_en) if req.history else q_en
+        q = f"[Product category: {req.category}] {standalone}" if req.category else standalone
+
+        result = None
+        for event, payload in answer_stream(q, req.jurisdiction):
+            if event == "done":
+                result = payload
+            else:
+                yield _sse(event, payload)
+
+        result["intent"] = gate["intent"]
+        result["jurisdiction"] = req.jurisdiction
+        result["language"] = detected
+        result["query_en"] = q_en
+        if standalone != q_en:
+            result["resolved_question"] = standalone
+        if detected != "en":
+            yield _sse("stage", {"stage": "translating", "message": "Translating the answer"})
+            result["answer_en"] = result["answer"]
+            result["answer"] = from_english(result["answer"], detected)
+
+        _audit("chat", {"user_id": user.id if user else None, "query": req.query, "lang": detected,
+                        "jurisdiction": req.jurisdiction, "confidence": result["confidence"],
+                        "abstained": result["abstained"]})
+        yield _sse("done", result)
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.get("/classify/questions")

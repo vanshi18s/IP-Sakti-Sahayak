@@ -151,14 +151,17 @@ GRADER_SYS = (
 
 
 def grade_chunks(query: str, chunks: list[dict]) -> list[dict]:
-    kept = []
-    for c in chunks:
-        verdict = _chat(GRADER_SYS, f"Question: {query}\n\nChunk:\n{c['text'][:1500]}", max_tokens=300)
-        v = verdict.upper()
-        c["relevant"] = ("RELEVANT" in v) and ("IRRELEVANT" not in v)
-        if c["relevant"]:
-            kept.append(c)
-    return kept
+    """Grade all chunks in parallel — this is the slowest step, so it runs concurrently."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(c):
+        verdict = _chat(GRADER_SYS, f"Question: {query}\n\nChunk:\n{c['text'][:1500]}", max_tokens=300).upper()
+        c["relevant"] = ("RELEVANT" in verdict) and ("IRRELEVANT" not in verdict)
+        return c
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        graded = list(pool.map(one, chunks))
+    return [c for c in graded if c["relevant"]]
 
 
 REWRITE_SYS = (
@@ -237,7 +240,87 @@ def verify_citations(answer: str, n_sources: int):
     return " ".join(kept).strip(), sorted(used)
 
 
-# ---------- public entry ----------
+def _build_result(query, chunks, graded, raw, rewritten):
+    """Shared post-processing: verify citations, score confidence, assemble sources."""
+    cleaned, used_ids = verify_citations(raw, len(graded))
+    if not used_ids and raw and "could not find" not in raw.lower():
+        cleaned, used_ids = raw, list(range(1, len(graded) + 1))
+
+    avg_score = sum(c["score"] for c in graded) / len(graded)
+    retrieval = max(0.0, min(1.0, (avg_score - 0.35) / 0.4))
+    grader_ratio = len(graded) / max(len(chunks), 1)
+    cite_coverage = len(used_ids) / len(graded)
+    confidence = round(0.4 * retrieval + 0.3 * grader_ratio + 0.3 * cite_coverage, 3)
+    abstained = (not used_ids) or ("could not find" in raw.lower())
+
+    sources = []
+    for i, c in enumerate(graded, start=1):
+        if i in used_ids:
+            m = c["meta"]
+            sources.append({
+                "id": i, "doc": m["doc"], "section": m["section"], "page": m["page"],
+                "jurisdiction": m["jurisdiction"], "url": m.get("url", ""),
+                "version_date": m.get("version_date", ""), "score": c["score"],
+                "snippet": c["text"][:300],
+            })
+    return {
+        "answer": cleaned if not abstained else
+                  "I could not find an authoritative source for this in the current corpus.",
+        "abstained": abstained, "confidence": confidence,
+        "confidence_breakdown": {
+            "retrieval_strength": round(retrieval, 2),
+            "passages_relevant": f"{len(graded)}/{len(chunks)}",
+            "sources_cited": f"{len(used_ids)}/{len(graded)}",
+        },
+        "sources": sources, "rewritten_query": rewritten, "disclaimer": config.DISCLAIMER,
+    }
+
+
+ABSTAIN_RESULT = {
+    "answer": "I could not find an authoritative source for this question in the current corpus.",
+    "abstained": True, "confidence": 0.0, "sources": [], "disclaimer": config.DISCLAIMER,
+}
+
+
+def answer_stream(query: str, jurisdiction: str | None = None):
+    """Generator of (event, payload) so the UI can show progress and the answer as it is written."""
+    yield "stage", {"stage": "retrieving", "message": "Searching the statutes"}
+    chunks = retrieve(query, jurisdiction)
+
+    yield "stage", {"stage": "grading", "message": f"Checking {len(chunks)} passages for relevance"}
+    graded = grade_chunks(query, chunks) if chunks else []
+    rewritten = None
+
+    if not graded:
+        yield "stage", {"stage": "rewriting", "message": "Nothing matched — rephrasing the search"}
+        rewritten = rewrite_query(query)
+        chunks = retrieve(rewritten, jurisdiction)
+        graded = grade_chunks(rewritten, chunks) if chunks else []
+
+    if not graded:
+        yield "done", {**ABSTAIN_RESULT, "rewritten_query": rewritten}
+        return
+
+    yield "stage", {"stage": "writing", "message": f"{len(graded)} relevant passages — writing the answer"}
+
+    scope = f"Jurisdiction in scope: {jurisdiction}." if jurisdiction else ""
+    user = f"{scope}\n\nSOURCES:\n{_format_sources(graded)}\n\nQUESTION: {query}"
+    kwargs = dict(model=config.GROQ_MODEL, temperature=0.1, max_tokens=1024, stream=True,
+                  messages=[{"role": "system", "content": ANSWER_SYS}, {"role": "user", "content": user}])
+    if "gpt-oss" in config.GROQ_MODEL:
+        kwargs["reasoning_effort"] = "low"
+
+    raw = ""
+    for part in _llm().chat.completions.create(**kwargs):
+        piece = part.choices[0].delta.content or ""
+        if piece:
+            raw += piece
+            yield "delta", {"text": piece}
+
+    yield "done", _build_result(query, chunks, graded, raw.strip(), rewritten)
+
+
+# ---------- public entry (non-streaming) ----------
 
 def answer_question(query: str, jurisdiction: str | None = None) -> dict:
     chunks = retrieve(query, jurisdiction)

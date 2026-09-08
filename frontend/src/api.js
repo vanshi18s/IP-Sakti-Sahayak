@@ -33,6 +33,30 @@ export const api = {
   health: () => get("/health"),
   chat: (query, jurisdiction, category, lang = "auto", history = []) =>
     post("/chat", { query, jurisdiction, category, lang, history }),
+
+  // Streaming version: onEvent(name, payload) is called for "stage", "delta" and "done".
+  chatStream: async (query, jurisdiction, category, lang, history, onEvent) => {
+    const res = await fetch(`${BASE}/chat/stream`, {
+      method: "POST", headers: headers(),
+      body: JSON.stringify({ query, jurisdiction, category, lang, history }),
+    });
+    if (!res.ok || !res.body) throw new Error(`chat failed (${res.status})`);
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const blocks = buf.split("\n\n");
+      buf = blocks.pop();
+      for (const b of blocks) {
+        const ev = b.match(/^event: (.+)$/m)?.[1];
+        const data = b.match(/^data: ([\s\S]+)$/m)?.[1];
+        if (ev && data) onEvent(ev, JSON.parse(data));
+      }
+    }
+  },
   classifyQuestions: () => get("/classify/questions"),
   classify: (answers) => post("/classify", { answers }),
   absQuestions: () => get("/abs/questions"),

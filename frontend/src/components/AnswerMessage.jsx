@@ -26,7 +26,17 @@ export default function AnswerMessage({ msg, onEscalate }) {
   if (msg.loading) {
     return (
       <div className="stem py-2">
-        <p className="text-sm text-ink-soft">Reading the statutes…</p>
+        {msg.partial ? (
+          <>
+            <div className="answer text-ink">{msg.partial}<span className="inline-block w-1.5 h-4 bg-sprout align-middle ml-0.5 animate-pulse" /></div>
+            {msg.stage && <p className="text-[11px] text-ink-soft mt-2">{msg.stage}</p>}
+          </>
+        ) : (
+          <p className="text-sm text-ink-soft flex items-center gap-2">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-sprout animate-pulse" />
+            {msg.stage || "Searching the statutes"}
+          </p>
+        )}
       </div>
     );
   }
