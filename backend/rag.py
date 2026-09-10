@@ -9,9 +9,11 @@ Flow:  query -> retrieve (vector) -> grade chunks (LLM yes/no)
 """
 import json
 import re
+import time
 from functools import lru_cache
 
 import chromadb
+import groq
 from groq import Groq
 
 import config
@@ -48,8 +50,17 @@ def _chat(system: str, user: str, temperature: float = 0.0, max_tokens: int = 10
     )
     if "gpt-oss" in config.GROQ_MODEL:      # reasoning model: keep thinking short
         kwargs["reasoning_effort"] = "low"
-    resp = _llm().chat.completions.create(**kwargs)
-    return (resp.choices[0].message.content or "").strip()
+        
+    for attempt in range(5):
+        try:
+            resp = _llm().chat.completions.create(**kwargs)
+            return (resp.choices[0].message.content or "").strip()
+        except groq.RateLimitError:
+            print(f"Rate limit hit! Pausing for 2 seconds to recover (Attempt {attempt + 1}/5)...")
+            time.sleep(2)
+            
+    # If it fails all 5 times, return empty string so it doesn't crash the UI
+    return ""
 
 
 # ---------- step 1: retrieve (hybrid: vector + BM25, fused with RRF) ----------
@@ -91,7 +102,7 @@ def retrieve(query: str, jurisdiction: str | None = None, top_k: int = config.TO
                               include=["documents", "metadatas", "distances"])
     vec_hits = {}
     for rank, (cid, doc, meta, dist) in enumerate(zip(res["ids"][0], res["documents"][0],
-                                                       res["metadatas"][0], res["distances"][0])):
+                                                      res["metadatas"][0], res["distances"][0])):
         vec_hits[cid] = {"text": doc, "meta": meta, "score": round(1 - dist, 4), "vrank": rank}
 
     # keyword leg
@@ -176,20 +187,65 @@ def rewrite_query(query: str) -> str:
 
 
 CONTEXT_SYS = (
-    "You rewrite a follow-up question so it can be understood on its own, using the conversation above. "
-    "Replace pronouns and references ('it', 'that', 'the same product', 'what about trademarks') with the "
-    "actual subject from earlier turns. Keep the user's intent and wording as close as possible. "
-    "If the question already stands alone, repeat it unchanged. Output only the question."
+    "You rewrite a follow-up question so it can be understood on its own, using the full conversation above. "
+    "Treat details supplied earlier by the user (product name, ingredients, formulation, intended use, country, "
+    "business goal and previous legal issue) as active context unless the user explicitly changes them. "
+    "Replace pronouns and references ('it', 'that', 'the same product', 'what about trademarks', 'and for this?') "
+    "with the actual subject and relevant facts from earlier turns. Never discard the earlier subject merely because "
+    "the follow-up is short. If the question already stands alone, repeat it unchanged. Output only the question."
+)
+
+MEMORY_SYS = (
+    "Maintain compact, factual memory for an ongoing Ayurveda IP conversation. "
+    "Return only these labelled lines when known: Product/formulation; Ingredients or biological resources; "
+    "Intended use or claims; Jurisdiction or markets; User's IP/regulatory goal; Open legal questions. "
+    "Keep exact product names, ingredients, countries, and constraints. Update earlier memory with new facts, "
+    "never invent facts, and keep the result under 1,200 characters. Write in English for reliable legal retrieval."
 )
 
 
-def contextualize(history: list[dict], question: str) -> str:
-    """Turn a follow-up into a standalone question using the last few turns."""
-    if not history:
+def contextualize(history: list[dict], question: str, memory: str = "") -> str:
+    """Turn only genuine follow-ups into standalone questions; preserve normal retrieval queries."""
+    if not history and not memory:
         return question
-    turns = "\n".join(f"{h['role']}: {h['content'][:400]}" for h in history[-6:])
-    out = _chat(CONTEXT_SYS, f"Conversation:\n{turns}\n\nFollow-up question: {question}", max_tokens=400)
-    return (out or question).strip().strip('"')
+    # Rewriting every question can damage retrieval. Only resolve context when
+    # the user actually refers back to something in the thread.
+    reference = re.compile(
+        r"\b(it|its|this|that|these|those|same|above|previous|former|latter)\b|"
+        r"^(what about|and what about|how about|does it|is it|and for)",
+        re.I,
+    )
+    if not reference.search(question) and len(question.split()) >= 6:
+        return question
+    turns = "\n".join(f"{h['role']}: {h['content'][:700]}" for h in history[-24:])
+    try:
+        out = _chat(
+            CONTEXT_SYS,
+            f"Persistent memory:\n{memory or '(none)'}\n\nRecent conversation:\n{turns or '(none)'}\n\nFollow-up question: {question}",
+            max_tokens=400,
+        )
+        resolved = (out or question).strip().strip('"')
+        return resolved if 4 <= len(resolved) <= 700 and "\n" not in resolved else question
+    except Exception as exc:
+        print(f"[memory] context resolution skipped: {exc}")
+        return question
+
+
+def update_conversation_memory(previous: str, history: list[dict], question: str, answer: str) -> str:
+    """Create a compact memory that survives after the recent-message buffer rolls over."""
+    turns = "\n".join(f"{h['role']}: {h['content'][:500]}" for h in history[-8:])
+    prompt = (
+        f"Previous persistent memory:\n{previous or '(none)'}\n\n"
+        f"Recent conversation:\n{turns or '(none)'}\n\n"
+        f"Newest user question: {question}\n"
+        f"Newest answer: {answer[:700]}"
+    )
+    try:
+        return (_chat(MEMORY_SYS, prompt, temperature=0.0, max_tokens=350) or previous).strip()[:1200]
+    except Exception as exc:
+        # Memory is an enhancement, never a reason to fail an otherwise valid chat.
+        print(f"[memory] update skipped: {exc}")
+        return previous
 
 
 # ---------- step 3: generate ----------

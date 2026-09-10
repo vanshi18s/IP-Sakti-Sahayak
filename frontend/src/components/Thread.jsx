@@ -14,18 +14,29 @@ export default function Thread({ messages, onStarter }) {
 
   if (messages.length === 0) {
     return (
-      <div className="min-h-full flex flex-col items-center justify-center text-center py-12">
-        <Sprig />
-
-        <h2 className="text-[34px] leading-[1.15] text-tulsi mt-6 max-w-2xl">
-          What does the law say about your product?
-        </h2>
-        <p className="text-[15px] text-ink-soft mt-3 max-w-lg leading-relaxed">
-          Ask in Hindi, English or any Indian language. Every answer names the Act and section it came from.
-        </p>
+      <div className="min-h-full flex flex-col items-center justify-center text-center py-10">
+        <div className="relative w-full max-w-4xl overflow-hidden rounded-[2rem] border border-tulsi/10 bg-[#edf5e9] shadow-[0_20px_50px_rgba(27,67,50,0.10)]">
+          <div className="absolute inset-0 bg-gradient-to-r from-[#f9fbf3] via-[#f9fbf3]/90 to-transparent" />
+          <img
+            src="/images/ayurveda-herbs.jpg"
+            alt="Traditional Ayurvedic herbs, spices, and a mortar and pestle"
+            className="absolute inset-y-0 right-0 h-full w-[42%] object-cover opacity-90"
+          />
+          <div className="relative z-10 max-w-xl px-7 py-10 text-left sm:max-w-[58%] sm:px-12 sm:py-12">
+            <div className="flex items-center gap-3 text-[11px] font-bold uppercase tracking-[0.22em] text-tulsi/70">
+              <img src="/leaf.svg" alt="" className="h-6 w-6" /> Ayurveda &amp; intellectual property
+            </div>
+            <h2 className="hero-heading text-[46px] sm:text-[58px] leading-[0.95] text-tulsi mt-5">
+              Ask IP-SAKTI Sahayak
+            </h2>
+            <p className="mt-4 max-w-md text-[14px] leading-relaxed text-ink-soft sm:text-[15px]">
+              about patentability, prior art, or regulatory/ABS guidance for your Ayurveda product or formulation — in text or voice, in Hindi, English, and regional languages.
+            </p>
+          </div>
+        </div>
 
         {/* Starters sit along a stem, like leaves */}
-        <div className="relative mt-9 w-full max-w-2xl">
+        <div className="relative mt-8 w-full max-w-2xl">
           <span className="absolute left-1/2 -translate-x-px top-0 bottom-0 w-px bg-sprout/45" aria-hidden="true" />
           <ol className="relative flex flex-col gap-3">
             {STARTERS.map((s, i) => (

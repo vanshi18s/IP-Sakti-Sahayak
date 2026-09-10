@@ -31,14 +31,14 @@ const get = (path) => fetch(`${BASE}${path}`, { headers: headers() }).then((r) =
 
 export const api = {
   health: () => get("/health"),
-  chat: (query, jurisdiction, category, lang = "auto", history = []) =>
-    post("/chat", { query, jurisdiction, category, lang, history }),
+  chat: (query, jurisdiction, category, lang = "auto", history = [], memory = "") =>
+    post("/chat", { query, jurisdiction, category, lang, history, memory }),
 
   // Streaming version: onEvent(name, payload) is called for "stage", "delta" and "done".
-  chatStream: async (query, jurisdiction, category, lang, history, onEvent) => {
+  chatStream: async (query, jurisdiction, category, lang, history, memory, onEvent) => {
     const res = await fetch(`${BASE}/chat/stream`, {
       method: "POST", headers: headers(),
-      body: JSON.stringify({ query, jurisdiction, category, lang, history }),
+      body: JSON.stringify({ query, jurisdiction, category, lang, history, memory }),
     });
     if (!res.ok || !res.body) throw new Error(`chat failed (${res.status})`);
     const reader = res.body.getReader();

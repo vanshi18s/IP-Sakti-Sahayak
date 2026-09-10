@@ -28,7 +28,7 @@ from guardrails import check as guardrail_check
 from review import review_document
 from abs_check import QUESTIONS as ABS_QUESTIONS, abs_check
 from prior_art import search_prior_art
-from rag import answer_question, answer_stream, contextualize, _collection
+from rag import answer_question, answer_stream, contextualize, update_conversation_memory, _collection
 from translate import to_english, from_english
 
 app = FastAPI(title="IP-SAKTI Sahayak API", version="0.1.0")
@@ -72,6 +72,7 @@ class ChatRequest(BaseModel):
     lang: str = "auto"         # "auto" detects script; or "en", "hi", "ta", ...
     category: Optional[str] = None
     history: list[Turn] = []   # previous turns in this thread, oldest first
+    memory: str = ""           # compact persistent memory for this thread
 
 
 class ClassifyRequest(BaseModel):
@@ -134,9 +135,10 @@ def chat(request: Request, req: ChatRequest, user: Optional[UserOut] = Depends(c
                 "disclaimer": config.DISCLAIMER}
 
     # 3. answer in English (follow-ups resolved against the thread)
-    standalone = contextualize([t.model_dump() for t in req.history], q_en) if req.history else q_en
+    standalone = contextualize([t.model_dump() for t in req.history], q_en, req.memory)
     q = f"[Product category: {req.category}] {standalone}" if req.category else standalone
     result = answer_question(q, req.jurisdiction)
+    result["conversation_memory"] = update_conversation_memory(req.memory, [t.model_dump() for t in req.history], q_en, result["answer"])
     result["intent"] = gate["intent"]
     if standalone != q_en:
         result["resolved_question"] = standalone
@@ -172,14 +174,17 @@ def chat_stream(request: Request, req: ChatRequest, user: Optional[UserOut] = De
                                 "language": detected, "disclaimer": config.DISCLAIMER})
             return
 
-        standalone = contextualize([t.model_dump() for t in req.history], q_en) if req.history else q_en
+        standalone = contextualize([t.model_dump() for t in req.history], q_en, req.memory)
         q = f"[Product category: {req.category}] {standalone}" if req.category else standalone
 
         result = None
         for event, payload in answer_stream(q, req.jurisdiction):
             if event == "done":
                 result = payload
-            else:
+            # The RAG model writes in English before the completed answer is
+            # translated. Do not expose that intermediate draft to users who
+            # asked in another language.
+            elif event != "delta" or detected == "en":
                 yield _sse(event, payload)
 
         result["intent"] = gate["intent"]
@@ -188,6 +193,9 @@ def chat_stream(request: Request, req: ChatRequest, user: Optional[UserOut] = De
         result["query_en"] = q_en
         if standalone != q_en:
             result["resolved_question"] = standalone
+        result["conversation_memory"] = update_conversation_memory(
+            req.memory, [t.model_dump() for t in req.history], q_en, result["answer"]
+        )
         if detected != "en":
             yield _sse("stage", {"stage": "translating", "message": "Translating the answer"})
             result["answer_en"] = result["answer"]

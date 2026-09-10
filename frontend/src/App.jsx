@@ -5,7 +5,6 @@ import Sidebar from "./components/Sidebar.jsx";
 import LeafWatermarks from "./components/LeafWatermarks.jsx";
 import Thread from "./components/Thread.jsx";
 import Composer from "./components/Composer.jsx";
-import Classify from "./components/Classify.jsx";
 import PriorArt from "./components/PriorArt.jsx";
 import AbsCheck from "./components/AbsCheck.jsx";
 import Sources from "./components/Sources.jsx";
@@ -15,8 +14,22 @@ import Review from "./components/Review.jsx";
 import Fees from "./components/Fees.jsx";
 import { exportQA } from "./report.js";
 
-const TABS = ["Ask", "Review document", "Classify product", "ABS check", "Fee estimate", "Prior art", "Corpus"];
+const TABS = ["Ask", "Review document", "ABS check", "Fee estimate", "Prior art", "Corpus"];
 const nextId = () => Math.random().toString(36).slice(2, 10);
+
+function historyFromMessages(thread) {
+  return thread.flatMap((message) => {
+    if (message.role === "user") return [{ role: "user", content: message.text }];
+    if (message.result) {
+      return [{ role: "assistant", content: message.result.answer_en || message.result.answer || "" }];
+    }
+    const firstPanel = message.panels?.find((panel) => panel.result)?.result;
+    if (firstPanel) {
+      return [{ role: "assistant", content: firstPanel.answer_en || firstPanel.answer || "" }];
+    }
+    return [];
+  }).filter((turn) => turn.content.trim());
+}
 
 export default function App() {
   const [tab, setTab] = useState("Ask");
@@ -27,7 +40,7 @@ export default function App() {
   const [chats, setChats] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [category, setCategory] = useState(null);
+  const [conversationMemory, setConversationMemory] = useState("");
   const [health, setHealth] = useState(null);
   const [user, setUser] = useState(null);
   const [showAuth, setShowAuth] = useState(false);
@@ -44,26 +57,27 @@ export default function App() {
     setChats(loadChats(owner));
     setMessages([]);
     historyRef.current = [];
+    setConversationMemory("");
     setActiveId(null);
   }, [owner]);
 
   useEffect(() => {
     if (!activeId || messages.length === 0) return;
     setChats((prev) => {
-      const next = [{ id: activeId, ts: Date.now(), messages, history: historyRef.current },
+      const next = [{ id: activeId, ts: Date.now(), messages, history: historyRef.current, memory: conversationMemory },
                     ...prev.filter((c) => c.id !== activeId)];
       saveChats(owner, next);
       return next;
     });
-  }, [messages, activeId, owner]);
+  }, [messages, activeId, owner, conversationMemory]);
 
   const tabs = user?.role === "facilitator" || user?.role === "admin" ? [...TABS, "Escalations"] : TABS;
 
-  const newChat = () => { setMessages([]); historyRef.current = []; setActiveId(null); setDraft(""); setTab("Ask"); };
+  const newChat = () => { setMessages([]); historyRef.current = []; setConversationMemory(""); setActiveId(null); setDraft(""); setTab("Ask"); };
   const openChat = (id) => {
     const c = chats.find((x) => x.id === id);
     if (!c) return;
-    setMessages(c.messages); historyRef.current = c.history || []; setActiveId(id); setTab("Ask");
+    setMessages(c.messages); historyRef.current = historyFromMessages(c.messages); setConversationMemory(c.memory || ""); setActiveId(id); setTab("Ask");
   };
   const deleteChat = (id) => {
     setChats((prev) => { const n = prev.filter((c) => c.id !== id); saveChats(owner, n); return n; });
@@ -87,24 +101,35 @@ export default function App() {
       : { id: holderId, role: "assistant", loading: true, question: q, jurisdiction: targets[0] };
     setMessages((m) => [...m, { id: nextId(), role: "user", text: q }, holder]);
 
-    const hist = historyRef.current.slice(-6);
+    // Rebuild memory from the visible thread. This avoids losing context if an
+    // older saved thread contains an incomplete streaming draft.
+    const hist = historyFromMessages(messages).slice(-24);
     try {
       if (targets.length === 1) {
         let partial = "";
-        await api.chatStream(q, targets[0], category?.name, lang, hist, (ev, data) => {
+        let completedResult = null;
+        await api.chatStream(q, targets[0], undefined, lang, hist, conversationMemory, (ev, data) => {
           if (ev === "stage") patch(holderId, { stage: data.message });
           else if (ev === "delta") { partial += data.text; patch(holderId, { partial }); }
-          else if (ev === "done") patch(holderId, { loading: false, partial: undefined, stage: undefined, result: data });
+          else if (ev === "done") {
+            completedResult = data;
+            setConversationMemory(data.conversation_memory || conversationMemory);
+            patch(holderId, { loading: false, partial: undefined, stage: undefined, result: data });
+          }
         });
-        historyRef.current = [...hist, { role: "user", content: q }, { role: "assistant", content: partial.slice(0, 600) }];
+        // Non-English drafts are hidden while translating, so use the completed
+        // result (and its internal English original when available) for memory.
+        const rememberedAnswer = completedResult?.answer_en || completedResult?.answer || partial;
+        historyRef.current = [...hist, { role: "user", content: q }, { role: "assistant", content: rememberedAnswer.slice(0, 1200) }];
       } else {
-        const out = await Promise.all(targets.map((j) => api.chat(q, j, category?.name, lang, hist)));
+        const out = await Promise.all(targets.map((j) => api.chat(q, j, undefined, lang, hist, conversationMemory)));
         patch(holderId, {
           panels: targets.map((j, i) => ({ id: nextId(), jurisdiction: j, question: q, result: out[i] })),
           differences: "",
         });
         historyRef.current = [...hist, { role: "user", content: q },
-                              { role: "assistant", content: (out[0].answer_en || out[0].answer || "").slice(0, 600) }];
+                              { role: "assistant", content: (out[0].answer_en || out[0].answer || "").slice(0, 1200) }];
+        setConversationMemory(out[0].conversation_memory || conversationMemory);
         api.compare(q, out[0].answer_en || out[0].answer, out[1].answer_en || out[1].answer)
            .then((r) => patch(holderId, { differences: r.differences })).catch(() => {});
       }
@@ -128,12 +153,12 @@ export default function App() {
       <div className="relative flex-1 min-w-0 flex flex-col md:h-screen">
         <LeafWatermarks />
 
-        <nav className="relative z-10 border-b border-patra-deep bg-paper/50 backdrop-blur">
+        <nav className="relative z-10 border-b border-emerald-950/20 bg-gradient-to-r from-[#195b3a] via-[#237247] to-[#1b5a3a] text-white shadow-[0_3px_16px_rgba(20,83,45,0.18)]">
           <div className="px-5 flex items-center gap-1 overflow-x-auto">
             {tabs.map((t) => (
               <button key={t} onClick={() => setTab(t)}
-                      className={`px-3 py-3.5 text-[13.5px] whitespace-nowrap border-b-2 -mb-px transition-colors ${
-                        tab === t ? "border-tulsi text-tulsi font-semibold" : "border-transparent text-ink-soft hover:text-ink"
+                      className={`px-4 py-4 text-[14px] whitespace-nowrap border-b-2 -mb-px transition-colors ${
+                        tab === t ? "border-[#f5d78f] text-white font-bold" : "border-transparent text-white/75 hover:text-white"
                       }`}>
                 {t}
               </button>
@@ -173,7 +198,7 @@ export default function App() {
               <Composer
                 value={draft} onChange={setDraft} onSend={() => send()} loading={loading}
                 jurisdiction={jurisdiction} setJurisdiction={setJurisdiction}
-                lang={lang} setLang={setLang} category={category}
+                lang={lang} setLang={setLang}
               />
             </div>
           </>
@@ -181,7 +206,6 @@ export default function App() {
           <main className="relative z-10 flex-1 overflow-y-auto scroll-quiet">
             <div className="max-w-3xl mx-auto px-6 py-8">
               {tab === "Review document" && <Review user={user} />}
-              {tab === "Classify product" && <Classify onDone={setCategory} />}
               {tab === "ABS check" && <AbsCheck />}
               {tab === "Fee estimate" && <Fees />}
               {tab === "Prior art" && <PriorArt />}

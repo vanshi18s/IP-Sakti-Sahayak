@@ -1,12 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api.js";
+
+const SPEECH_LANGUAGES = {
+  en: "en-IN", hi: "hi-IN", mr: "mr-IN", ta: "ta-IN", te: "te-IN",
+  kn: "kn-IN", ml: "ml-IN", bn: "bn-IN", gu: "gu-IN",
+};
 
 // One assistant turn: the answer hangs off a stem, each cited source is a leaf on it.
 export default function AnswerMessage({ msg, onEscalate }) {
   const [active, setActive] = useState(null);
   const [escalated, setEscalated] = useState(false);
   const [escError, setEscError] = useState("");
+  const [speaking, setSpeaking] = useState(false);
   const r = msg.result;
+
+  useEffect(() => () => window.speechSynthesis?.cancel(), []);
 
   const jump = (id) => {
     setActive(id);
@@ -21,6 +29,22 @@ export default function AnswerMessage({ msg, onEscalate }) {
     } catch (e) {
       setEscError(e.message === "Login required" ? "Sign in to send this to a facilitator." : e.message);
     }
+  };
+
+  const toggleSpeech = () => {
+    if (!("speechSynthesis" in window)) return;
+    if (speaking) {
+      window.speechSynthesis.cancel();
+      setSpeaking(false);
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(String(r.answer).replace(/\[\d+\]/g, ""));
+    utterance.lang = SPEECH_LANGUAGES[r.language] || navigator.language || "en-IN";
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+    setSpeaking(true);
   };
 
   if (msg.loading) {
@@ -79,11 +103,16 @@ export default function AnswerMessage({ msg, onEscalate }) {
         {renderAnswer(r.answer, jump)}
       </div>
 
-      {r.answer_en && (
-        <details className="mt-2 text-sm text-ink-soft">
-          <summary className="cursor-pointer text-xs">English original</summary>
-          <div className="answer mt-1">{renderAnswer(r.answer_en, jump)}</div>
-        </details>
+      {typeof window !== "undefined" && "speechSynthesis" in window && (
+        <button
+          type="button"
+          onClick={toggleSpeech}
+          aria-pressed={speaking}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-tulsi/25 px-3 py-1.5 text-xs font-semibold text-tulsi transition-colors hover:bg-tulsi hover:text-white"
+        >
+          <SpeakerIcon />
+          {speaking ? "Stop listening" : "Listen to answer"}
+        </button>
       )}
 
       {r.sources?.length > 0 && (
@@ -134,6 +163,15 @@ export default function AnswerMessage({ msg, onEscalate }) {
         {escError && <span className="text-copper">{escError}</span>}
       </div>
     </div>
+  );
+}
+
+function SpeakerIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+      <path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14" />
+    </svg>
   );
 }
 

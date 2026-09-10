@@ -8,7 +8,7 @@ const LANGS = [
 
 export default function Composer({
   value, onChange, onSend, loading,
-  jurisdiction, setJurisdiction, lang, setLang, category,
+  jurisdiction, setJurisdiction, lang, setLang,
 }) {
   return (
     <div className="border-t border-patra-deep bg-patra/95 backdrop-blur px-6 pt-3 pb-4">
@@ -22,11 +22,6 @@ export default function Composer({
               {LANGS.map(([c, n]) => <option key={c} value={c}>{n}</option>)}
             </select>
           </label>
-          {category && (
-            <span className="px-2 py-0.5 rounded-full bg-haldi-wash text-[11px] text-[#8a5c07] border border-[#ecd7a8]">
-              {category.name}
-            </span>
-          )}
         </div>
 
         <div className="flex items-end gap-2 bg-paper border border-patra-deep rounded-2xl pl-4 pr-2 py-2 shadow-[0_1px_2px_rgba(19,32,26,0.04)] focus-within:border-tulsi">
@@ -49,8 +44,8 @@ export default function Composer({
           </button>
         </div>
 
-        <p className="text-[11px] text-ink-soft/80 mt-2 text-center">
-          Answers come from cited statutes. This is information, not legal advice.
+        <p className="mt-3 border-t border-patra-deep pt-2 text-center text-[12px] font-bold text-black">
+          @Disclaimer: Answers come from cited statutes. This is information, not legal advice.
         </p>
       </div>
     </div>

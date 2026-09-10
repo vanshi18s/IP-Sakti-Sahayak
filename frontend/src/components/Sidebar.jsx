@@ -4,7 +4,7 @@ import LeafWatermarks from "./LeafWatermarks.jsx";
 // Dark rail: brand, saved threads, then New chat and account at the foot.
 export default function Sidebar({ chats, activeId, onOpen, onNew, onDelete, user, onSignIn, onSignOut, corpusCount, backendUp }) {
   return (
-    <aside className="relative w-full md:w-64 shrink-0 bg-bark text-mist flex md:flex-col md:h-screen md:sticky md:top-0 overflow-hidden">
+    <aside className="relative w-full md:w-64 shrink-0 bg-[#237247] text-mist flex md:flex-col md:h-screen md:sticky md:top-0 overflow-hidden">
       <LeafWatermarks tone="dark" />
       <div className="relative z-10 px-4 py-4 flex items-center gap-2.5 border-b border-white/10">
         <img src="/leaf.svg" alt="" className="w-6 h-6 brightness-0 invert opacity-90" />
@@ -17,12 +17,7 @@ export default function Sidebar({ chats, activeId, onOpen, onNew, onDelete, user
       </div>
 
       <div className="relative z-10 hidden md:block flex-1 overflow-y-auto scroll-quiet px-2 py-3">
-        <div className="text-[10.5px] uppercase tracking-wide text-mist/45 px-2 mb-2">Threads</div>
-        {chats.length === 0 ? (
-          <p className="text-[11.5px] text-mist/50 px-2 leading-relaxed">
-            Your conversations stay on this device. Nothing is uploaded.
-          </p>
-        ) : (
+        {chats.length > 0 && (
           <ol className="flex flex-col gap-0.5">
             {chats.map((c) => (
               <li key={c.id} className="group relative">

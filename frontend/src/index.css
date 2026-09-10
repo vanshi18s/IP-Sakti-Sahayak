@@ -24,6 +24,7 @@
 
   --font-serif: "Tiro Devanagari Hindi", Georgia, serif;
   --font-ui: "Bricolage Grotesque", system-ui, sans-serif;
+  --font-display: "Cormorant Garamond", Georgia, serif;
 
   /* Aliases for the older screens */
   --color-leaf: #1b4332;
@@ -45,7 +46,8 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3 { font-family: var(--font-ui); font-weight: 600; letter-spacing: -0.015em; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.025em; }
+.hero-heading { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.035em; }
 
 /* Answer body: serif, generous leading, capped measure */
 .answer {

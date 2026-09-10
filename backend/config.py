@@ -7,7 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-m3")
 
 CHROMA_DIR = (BASE_DIR / os.getenv("CHROMA_DIR", "../data/chroma_db")).resolve()
